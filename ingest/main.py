@@ -730,6 +730,7 @@ def hec_send(ir_json,source):
     # event['host'] = racer_name
     event['source'] = source
     event['event'] = ir_json
+    # print(json.dumps(event, sort_keys=True, indent=4))
     print(event)
     # url = splunk_instance
     # header = {'Authorization' : '{}'.format('Splunk ' + hec_token)}
@@ -767,9 +768,9 @@ if __name__ == '__main__':
             # if we are, then process data
             if state.ir_connected:
 
-                loop(normalised_dict, "NormalisedRace")
+                # loop(normalised_dict, "NormalisedRace")
 
-                '''
+                
                 if i % 20 == 0:
                     loop(track_dict, "Track")
                 elif (i + 3) % 20 == 0:
@@ -782,7 +783,7 @@ if __name__ == '__main__':
                     loop(race_dict, "Race")
                 elif (i + 15) % 20 == 0:
                     loop(environment_dict, "Env")
-                '''
+
             # sleep for 1 second
             # maximum you can use is 1/60
             # cause iracing updates data with 60 fps
