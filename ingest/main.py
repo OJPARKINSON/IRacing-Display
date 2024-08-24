@@ -1,10 +1,13 @@
 #!python3
+import asyncio
+import json
 import irsdk
 import logging
 from logging.handlers import TimedRotatingFileHandler
 import os
 import time
 from datetime import datetime
+import websockets
 
 if not os.path.exists('C:/iracing_telemetry'):
     os.mkdir('C:/iracing_telemetry')
@@ -699,9 +702,9 @@ def check_iracing():
         state.ir_connected = True
         app_logger.info(time.ctime() + ' irsdk connected')
 
-# async def test(speed):
-#     async with websocket.connect('ws:// /ws') as websocket:
-#         await websocket.send(speed)
+async def test(speed):
+    async with websockets.connect('ws://192.168.0.16:8080/ws') as websocket:
+        await websocket.send(speed)
 
 def hec_send(ir_json,source):
 
@@ -710,8 +713,9 @@ def hec_send(ir_json,source):
     event['host'] = "Oliver Parkinson"
     event['source'] = source
     event['event'] = ir_json
-    # print(json.dumps(event, sort_keys=True, indent=4)) //pretty print
-    print(event['event']["speed"])
+    print(json.dumps(event['event']['Speed'], sort_keys=True, indent=4)) 
+    asyncio.run(test(str(event['event']['Speed'])))
+    # print(event['event']['speed'])
     # url = splunk_instance
     # header = {'Authorization' : '{}'.format('Splunk ' + hec_token)}
     # try:
@@ -722,7 +726,7 @@ def hec_send(ir_json,source):
     #     response.raise_for_status()
 
     # except requests.exceptions.HTTPError as err:
-    #     data_logger.info(json.dumps(event))
+    #     data_logger.info(json.dumps(event)) 
     #     app_logger.error(err)
 
 def loop(json_dict, source):
@@ -750,19 +754,19 @@ if __name__ == '__main__':
 
                 # loop(normalised_dict, "NormalisedRace")
 
-                if i % 20 == 0:
-                    loop(track_dict, "Track")
-                elif (i + 3) % 20 == 0:
-                    loop(compute_dict, "Compute")
-                elif (i + 6) % 20 == 0:
-                    loop(camera_dict, "Camera")
-                elif (i + 9) % 20 == 0:
-                    loop(vehicle_dict, "Vehicle")
-                elif (i + 12) % 20 == 0:
-                    loop(race_dict, "Race")
-                elif (i + 15) % 20 == 0:
-                    loop(environment_dict, "Env")
-
+                # if i % 20 == 0:
+                #     loop(track_dict, "Track")
+                # elif (i + 3) % 20 == 0:
+                #     loop(compute_dict, "Compute")
+                # elif (i + 6) % 20 == 0:
+                #     loop(camera_dict, "Camera")
+                # elif (i + 9) % 20 == 0:
+                #     loop(vehicle_dict, "Vehicle")
+                # elif (i + 12) % 20 == 0:
+                #     loop(race_dict, "Race")
+                # elif (i + 15) % 20 == 0:
+                #     loop(environment_dict, "Env")
+                loop(vehicle_dict, "Vehicle")
             # sleep for 1 second
             # maximum you can use is 1/60
             # cause iracing updates data with 60 fps
