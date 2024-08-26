@@ -12,9 +12,8 @@ const oneMillion = 350;
 export default function BarChart({
   data,
 }: {
-  data: { name: string; speed: number }[];
+  data: { name: string; speed: string }[];
 }) {
-  const barWidth = 60;
   const width = 450;
   const height = 450;
   const chartBottomY = height - marginBottom;
@@ -30,7 +29,7 @@ export default function BarChart({
   // Create the vertical scale and its axis generator.
   const yScale = d3
     .scaleLinear()
-    .domain([0, 300])
+    .domain([0, 250])
     .range([chartBottomY, marginTop]);
 
   const yAxis = d3.axisLeft(yScale);
@@ -52,6 +51,7 @@ export default function BarChart({
   return (
     <>
       <div className="h-full w-full flex-col ">
+        {data[0].speed} kph
         <svg
           width={width}
           height={height}
