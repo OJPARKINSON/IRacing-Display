@@ -13,7 +13,7 @@ export default function DashboardPage() {
     }
   );
 
-  const speed = [{ name: "test", speed: data }];
+  const speed = [{ name: "test", speed: (50 * 3.6).toFixed(2) }];
 
   return (
     <>
