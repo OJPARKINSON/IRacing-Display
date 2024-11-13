@@ -2,6 +2,10 @@
 
 An IRacing display over local network
 
+- Ingest takes the data out of Iracing and sends it over the local network to the telemtry service
+- The telemetry then formats this data and saves it
+- The dashboard then displays the data that is stored in the telemtry service
+
 ### Sources
 
 [IRacing data ingest](https://github.com/hiimkyle/vr2c20)
