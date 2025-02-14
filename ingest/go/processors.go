@@ -26,7 +26,8 @@ func newLoaderProcessor(storage *storage, groupNumber int, threshold int) *loade
 func (l *loaderProcessor) Whitelist() []string {
 	return []string{
 		// "Lap", "PlayerCarClassPosition", "LapDist", "ThrottleRaw", "LapDistPct", "PlayerCarClassPosition", "FuelLevel",
-		"Lap", "Lat", "Lon", "SteeringWheelAngle", "ThrottleRaw", "Brake", "Gear", "RPM"}
+		"LapDistPct", "Speed", "Throttle", "Brake", "Gear", "RPM", "SteeringWheelAngle", "Lap", "VelocityX", "VelocityY",
+	}
 }
 
 // Our method for processing a single tick of telemetry.
@@ -34,7 +35,7 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 	// Add our group number to the tick of telemetry.
 	// This will be useful to seperate ticks by group in our storage.
 
-	if input["Lap"] == 25 {
+	if input["Lap"] == 13 {
 		fmt.Println(input)
 
 	}
