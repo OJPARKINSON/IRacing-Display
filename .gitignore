@@ -23,4 +23,9 @@ go.work.sum
 
 # env file
 .env
-ingest/go/*.ibt
+ingest/go/ibt_files/*.ibt
+*.DS_Store
+.DS_Store
+**/.env.influxdb-admin-password
+**/.env.influxdb-admin-token
+**/.env.influxdb-admin-username
