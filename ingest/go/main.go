@@ -2,29 +2,50 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/teamjorge/ibt"
-	"github.com/teamjorge/ibt/examples"
 )
 
 func main() {
-	// Parse the files into stubs
-	stubs, err := examples.ParseExampleStubs()
-	if err != nil {
-		log.Fatal(err)
+	// Ensure an IBT file path is provided
+	if len(os.Args) < 2 {
+		log.Fatal("Usage: ./telemetry-app <ibt-file-path>")
 	}
 
-	// Create our storage client
+	ibtFilePath := os.Args[1]
+	fmt.Println("Processing IBT file:", ibtFilePath)
+
+	files, err := filepath.Glob(ibtFilePath)
+	if err != nil {
+		fmt.Errorf("could not glob the given input files: %v", err)
+	}
+
+	// Parse the files into stubs
+	stubs, err := ibt.ParseStubs(files...)
+	if err != nil {
+		fmt.Errorf("failed to parse stubs for %v. error - %v", files, err)
+	}
+
+	// Ensure stubs are not empty
+	if len(stubs) == 0 {
+		log.Println("No telemetry data found in IBT file.")
+		time.Sleep(60 * time.Second) // Keep the container alive for debugging
+		return
+	}
+
+	// Initialize InfluxDB storage
 	storage := newStorage()
 	if err := storage.Connect(); err != nil {
 		log.Fatal(err)
 	}
-	// Close it when the application ends
 	defer storage.Close()
 
-	// We group our stubs mainly to be able to identify the batches we are loading
-	// This might not be necessary on your use case
+	// Process telemetry data
 	groups := stubs.Group()
 	defer ibt.CloseAllStubs(groups)
 
@@ -33,18 +54,18 @@ func main() {
 		if count > 0 {
 			continue
 		}
-		// Create a new processor for this group and set the groupNumber.
-		// It embeds our storage and we set our loading threshold to 100
-		processor := newLoaderProcessor(storage, groupNumber, 100)
+		processor := newLoaderProcessor(storage, groupNumber, 1000)
 
-		// Process the group
 		if err := ibt.Process(context.Background(), group, processor); err != nil {
-			log.Fatalf("failed to process telemetry for stubs %v: %v", stubs, err)
+			log.Fatalf("Failed to process telemetry: %v", err)
 		}
 
-		// Print the number of batches loaded after each group
 		log.Printf("%d batches loaded after group %d\n", storage.Loaded(), groupNumber)
-		count += 1
+		count++
+	}
 
+	log.Println("Processing complete. Sleeping to keep container running.")
+	for {
+		time.Sleep(60 * time.Second) // Prevent container from exiting
 	}
 }

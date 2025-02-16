@@ -2,65 +2,58 @@ package main
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/teamjorge/ibt"
 	"github.com/teamjorge/ibt/headers"
 )
 
 type loaderProcessor struct {
-	// Our storage client
 	*storage
-	// Cache for holding the number of telemetry ticks equal to threshold
-	cache []map[string]interface{}
-	// Number
+	cache       []map[string]interface{}
 	groupNumber int
 	threshold   int
+	mu          sync.Mutex
 }
 
-// Simple Constructor for creating our processor
+// Constructor for creating our processor
 func newLoaderProcessor(storage *storage, groupNumber int, threshold int) *loaderProcessor {
-	return &loaderProcessor{storage, make([]map[string]interface{}, 0), groupNumber, threshold}
+	return &loaderProcessor{
+		storage:     storage,
+		cache:       make([]map[string]interface{}, 0, threshold),
+		groupNumber: groupNumber,
+		threshold:   threshold,
+	}
 }
 
 // Columns we want to parse from telemetry
 func (l *loaderProcessor) Whitelist() []string {
 	return []string{
-		// "Lap", "PlayerCarClassPosition", "LapDist", "ThrottleRaw", "LapDistPct", "PlayerCarClassPosition", "FuelLevel",
-		"LapDistPct", "Speed", "Throttle", "Brake", "Gear", "RPM", "SteeringWheelAngle", "Lap", "VelocityX", "VelocityY",
+		"Lap", "LapDistPct", "Speed", "Throttle", "Brake", "Gear", "RPM",
+		"SteeringWheelAngle", "VelocityX", "VelocityY", "Lat", "Lon",
 	}
 }
 
-// Our method for processing a single tick of telemetry.
+// Process a single tick of telemetry.
 func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers.Session) error {
-	// Add our group number to the tick of telemetry.
-	// This will be useful to seperate ticks by group in our storage.
-
-	if input["Lap"] == 13 {
-		fmt.Println(input)
-
-	}
-
-	// fmt.Println(session)
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	input["groupNum"] = l.groupNumber
-
-	// Add it to the cache
 	l.cache = append(l.cache, input)
 
-	// If our cache is past the threshold, that means we can now do a bulk load
-	// to our storage.
+	// Bulk load if threshold is reached
 	if len(l.cache) >= l.threshold {
 		if err := l.loadBatch(); err != nil {
 			return fmt.Errorf("failed to load batch - %v", err)
 		}
-		// Empty the cache again
-		l.cache = make([]map[string]interface{}, 0)
+		l.cache = l.cache[:0] // Reset cache
 	}
 
 	return nil
 }
 
+// Loads batch data efficiently
 func (l *loaderProcessor) loadBatch() error {
-	// Bulk load our batch to storage.
 	return l.Exec(l.cache)
 }
