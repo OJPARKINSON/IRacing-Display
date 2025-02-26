@@ -31,6 +31,7 @@ func main() {
 		fmt.Errorf("failed to parse stubs for %v. error - %v", files, err)
 	}
 
+	fmt.Println(stubs[0])
 	// Ensure stubs are not empty
 	if len(stubs) == 0 {
 		log.Println("No telemetry data found in IBT file.")

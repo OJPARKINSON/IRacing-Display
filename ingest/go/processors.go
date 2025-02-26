@@ -30,7 +30,7 @@ func newLoaderProcessor(storage *storage, groupNumber int, threshold int) *loade
 func (l *loaderProcessor) Whitelist() []string {
 	return []string{
 		"Lap", "LapDistPct", "Speed", "Throttle", "Brake", "Gear", "RPM",
-		"SteeringWheelAngle", "VelocityX", "VelocityY", "Lat", "Lon",
+		"SteeringWheelAngle", "VelocityX", "VelocityY", "Lat", "Lon", "SessionTime", "LapCurrentLapTime", "PlayerCarPosition", "FuelLevel",
 	}
 }
 
@@ -40,6 +40,7 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 	defer l.mu.Unlock()
 
 	input["groupNum"] = l.groupNumber
+	input["sessionID"] = session.SessionInfo.Sessions[2].SessionNum
 	l.cache = append(l.cache, input)
 
 	// Bulk load if threshold is reached
