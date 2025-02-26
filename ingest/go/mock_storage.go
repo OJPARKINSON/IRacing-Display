@@ -60,12 +60,18 @@ func getFloatValue(record map[string]interface{}, key string) float64 {
 			if err == nil {
 				return f
 			}
+			log.Printf("Float parse error for key %s: %v", key, err)
 		case int:
 			return float64(v)
 		case int64:
 			return float64(v)
+		case float32:
+			return float64(v)
+		default:
+			log.Printf("Unexpected type for key %s: %T", key, v)
 		}
 	}
+	log.Printf("Missing value for key %s", key)
 	return 0.0
 }
 
@@ -83,8 +89,12 @@ func getIntValue(record map[string]interface{}, key string) int {
 			if err == nil {
 				return i
 			}
+			log.Printf("Integer parse error for key %s: %v", key, err)
+		default:
+			log.Printf("Unexpected type for key %s: %T", key, v)
 		}
 	}
+	log.Printf("Missing value for key %s", key)
 	return 0
 }
 
@@ -93,20 +103,28 @@ func (s *storage) Exec(data []map[string]interface{}) error {
 	defer s.mu.Unlock()
 
 	for _, record := range data {
-		sessionID := s.sessionID
 		lapID := getIntValue(record, "Lap")
+
+		sessionStartTime := time.Now()
+
+		if lapID == 24 {
+			fmt.Println(record)
+		}
+
 		sessionTime := getFloatValue(record, "SessionTime")
 
-		tickTime := time.Unix(int64(sessionTime), int64((sessionTime-float64(int64(sessionTime)))*1e9))
+		seconds := int64(sessionTime)
+		nanoseconds := int64((sessionTime - float64(seconds)) * 1e9)
+
+		tickTime := sessionStartTime.Add(time.Duration(seconds)*time.Second + time.Duration(nanoseconds)*time.Nanosecond)
 
 		point := influxdb2.NewPoint(
 			"telemetry_ticks",
 			map[string]string{
-				"session_id": sessionID,
+				"session_id": s.sessionID,
 				"lap_id":     fmt.Sprintf("%d", lapID),
 			},
 			map[string]interface{}{
-				"session_time":         sessionTime,
 				"brake":                getFloatValue(record, "Brake"),
 				"gear":                 getIntValue(record, "Gear"),
 				"lap":                  getIntValue(record, "Lap"),
@@ -119,6 +137,10 @@ func (s *storage) Exec(data []map[string]interface{}) error {
 				"throttle":             getFloatValue(record, "Throttle"),
 				"velocity_x":           getFloatValue(record, "VelocityX"),
 				"velocity_y":           getFloatValue(record, "VelocityY"),
+				"lap_current_lap_time": getFloatValue(record, "LapCurrentLapTime"),
+				"player_car_position":  getFloatValue(record, "PlayerCarPosition"),
+				"fuel_level":           getFloatValue(record, "FuelLevel"),
+				"session_time":         sessionTime,
 			},
 			tickTime, // ✅ Ensures unique timestamps
 		)
