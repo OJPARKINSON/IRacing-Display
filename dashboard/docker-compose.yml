@@ -1,6 +1,8 @@
 version: "3.8"
 
 services:
+  # InfluxDB Service (reference to the existing service in your other compose file)
+  # You can remove this if you're connecting to an existing InfluxDB instance
   influxdb:
     image: influxdb:2
     container_name: influxdb
@@ -27,51 +29,46 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
+    networks:
+      - telemetry-network
 
-  go_app:
-    build: .
-    container_name: go-telemetry
-    restart: "no"
+  # Next.js Telemetry Dashboard
+  telemetry-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: telemetry-dashboard
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      # InfluxDB connection parameters
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_TOKEN_FILE: /run/secrets/influxdb-admin-token
+      INFLUXDB_ORG: myorg
+      INFLUXDB_BUCKET: racing_telemetry
+      # Node environment settings
+      NODE_ENV: production
+      # Next.js specific settings
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
     depends_on:
       influxdb:
         condition: service_healthy
-    environment:
-      INFLUXDB_URL: http://influxdb:8086
-      INFLUXDB_ORG: myorg
-      INFLUXDB_BUCKET: telemetry
-      INFLUXDB_TOKEN_FILE: /run/secrets/influxdb-admin-token
-      # Performance tuning
-      MAX_BATCH_SIZE: "5000"
-      BATCH_TIMEOUT: "1s"
-      MAX_RETRIES: "3"
-      RETRY_DELAY: "500ms"
-      PARALLEL_GROUPS: "2"
-      BATCH_SIZE: "1000"
-      # Golang performance tuning
-      GOMAXPROCS: "0" # Let Go determine based on available CPUs
-      GOGC: "100" # Default garbage collection threshold
     secrets:
       - influxdb-admin-token
-    volumes:
-      - ./ibt_files:/app/ibt_files
-    entrypoint:
-      [
-        "/app/telemetry-app",
-        "/app/ibt_files/mclaren720sgt3_monza full 2025-02-09 12-58-11.ibt",
-      ]
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 1G
-        reservations:
-          cpus: "1"
-          memory: 512M
+    networks:
+      - telemetry-network
+    # For development, you can mount your source code to enable hot reloading
+    # volumes:
+    #   - ./:/app
+    #   - /app/node_modules
+    #   - /app/.next
 
+networks:
+  telemetry-network:
+    driver: bridge
+
+# Define secrets (should match with your existing InfluxDB setup)
 secrets:
   influxdb-admin-username:
     file: ./.env.influxdb-admin-username

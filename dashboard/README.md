@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Next.js Telemetry Dashboard Setup
 
-## Getting Started
+This document explains how to set up and run the Next.js telemetry dashboard that connects to InfluxDB.
 
-First, run the development server:
+## Project Structure
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Ensure your project has the following structure:
+
+```
+/
+├── app/
+│   ├── api/
+│   │   ├── health/
+│   │   │   └── route.ts
+│   │   ├── laps/
+│   │   │   └── route.ts
+│   │   ├── sessions/
+│   │   │   └── route.ts
+│   │   └── telemetry/
+│   │       └── route.ts
+│   └── page.tsx
+├── lib/
+│   └── influxdb.ts
+├── .env.influxdb-admin-token
+├── .env.influxdb-admin-username
+├── .env.influxdb-admin-password
+├── Dockerfile
+├── docker-compose.yml
+├── next.config.js
+├── package.json
+└── tsconfig.json
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Steps to Set Up
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Install Dependencies**:
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+   ```bash
+   npm install
+   ```
 
-## Learn More
+2. **Set Environment Variables**:
 
-To learn more about Next.js, take a look at the following resources:
+   - Create the necessary secret files:
+     - `.env.influxdb-admin-token`
+     - `.env.influxdb-admin-username`
+     - `.env.influxdb-admin-password`
+   - Or update `docker-compose.yml` to use different secret sources
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **Build and Run with Docker**:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+   ```bash
+   docker-compose up -d
+   ```
 
-## Deploy on Vercel
+4. **Access the Dashboard**:
+   - Open your browser to `http://localhost:3000`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Troubleshooting
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+### Module Resolution Issues
+
+If you encounter module resolution errors:
+
+1. Make sure your `tsconfig.json` has the correct paths configuration:
+
+   ```json
+   "paths": {
+     "@/*": ["./*"]
+   }
+   ```
+
+2. Verify that the import paths in API routes are correct:
+
+   ```typescript
+   import { getInfluxDBClient, influxConfig } from "../../../lib/influxdb";
+   ```
+
+3. Try restarting the Next.js development server or rebuilding the Docker container.
+
+### InfluxDB Connection Issues
+
+If the dashboard can't connect to InfluxDB:
+
+1. Check that InfluxDB is running:
+
+   ```bash
+   docker-compose ps
+   ```
+
+2. Verify that the InfluxDB credentials are correct
+3. Ensure that the bucket and organization exist in your InfluxDB instance
+4. Check the network connectivity between containers
+
+## Customizing the Dashboard
+
+To add more features to the dashboard:
+
+1. Add new API endpoints in the `/app/api/` directory
+2. Update the UI components in `page.tsx`
+3. Add new visualization components as needed
+
+Refer to the Next.js and InfluxDB documentation for more advanced customizations.
