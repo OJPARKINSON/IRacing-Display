@@ -1,5 +1,11 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import { useSearchParams } from "next/navigation";
 import { InfoBox, TelemetryChart } from "@/components/InfoBox";
 import Map from "ol/Map";
@@ -23,7 +29,7 @@ export interface SessionInfo {
 }
 
 // Type for telemetry data point
-interface TelemetryDataPoint {
+export interface TelemetryDataPoint {
   index: number;
   time: number;
   sessionTime: number;
@@ -41,6 +47,7 @@ interface TelemetryDataPoint {
   FuelLevel: number;
   LapCurrentLapTime: number;
   PlayerCarPosition: number;
+  coordinates?: [number, number]; // Added for storing calculated coordinates
 }
 
 // Type for raw telemetry data from API
@@ -88,6 +95,13 @@ export default function TelemetryDashboard(): JSX.Element {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [trackPath, setTrackPath] = useState<SVGPathElement | null>(null);
+  const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(
+    null
+  );
+  const hoverMarkerSourceRef = useRef<VectorSource | null>(null);
+  const [selectedPointIndex, setSelectedPointIndex] = useState<number>(0);
+  const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
+  const selectedMarkerSourceRef = useRef<VectorSource | null>(null);
 
   // Available telemetry metrics for display
   const availableMetrics: string[] = [
@@ -145,6 +159,42 @@ export default function TelemetryDashboard(): JSX.Element {
     loadSvg();
   }, [svgContainerRef.current]);
 
+  useEffect(() => {
+    if (
+      !mapInitialized ||
+      !olMapRef.current ||
+      !racingLineSourceRef.current ||
+      !carPositionSourceRef.current ||
+      !hoverMarkerSourceRef.current ||
+      !svgLoaded ||
+      !trackPath ||
+      telemetryData.length === 0
+    ) {
+      return;
+    }
+
+    // Clear hover marker when point changes
+    hoverMarkerSourceRef.current.clear();
+
+    // Add hover marker if there's a hovered point
+    if (
+      hoveredPointIndex !== null &&
+      hoveredPointIndex >= 0 &&
+      hoveredPointIndex < telemetryData.length
+    ) {
+      const hoveredPoint = telemetryData[hoveredPointIndex];
+
+      // If this point has coordinates (already calculated)
+      if (hoveredPoint.coordinates) {
+        const hoverFeature = new Feature({
+          geometry: new Point(hoveredPoint.coordinates),
+        });
+
+        hoverMarkerSourceRef.current.addFeature(hoverFeature);
+      }
+    }
+  }, [hoveredPointIndex, telemetryData, mapInitialized, svgLoaded]);
+
   // Initialize OpenLayers map
   useEffect(() => {
     if (mapInitialized || !mapContainerRef.current) return;
@@ -155,7 +205,7 @@ export default function TelemetryDashboard(): JSX.Element {
       const svgHeight = 783;
       const extent = [0, 0, svgWidth, svgHeight];
 
-      // Create custom projection for the SVG
+      // Create custom projection for the SVG - with no rotation
       const projection = new Projection({
         code: "svg-pixels",
         units: "pixels",
@@ -203,16 +253,41 @@ export default function TelemetryDashboard(): JSX.Element {
         source: trackImageSource,
       });
 
+      const selectedMarkerSource = new VectorSource();
+      selectedMarkerSourceRef.current = selectedMarkerSource;
+
+      const selectedMarkerLayer = new VectorLayer({
+        source: selectedMarkerSource,
+        style: new Style({
+          image: new Circle({
+            radius: 8,
+            fill: new Fill({
+              color: "#00ffff", // Cyan for better visibility
+            }),
+            stroke: new Stroke({
+              color: "#000000",
+              width: 2,
+            }),
+          }),
+        }),
+        zIndex: 100, // Ensure it's above other layers
+      });
+
       // Create the map
       const map = new Map({
         target: mapContainerRef.current!,
-        layers: [trackLayer, racingLineLayer, carPositionLayer],
+        layers: [
+          trackLayer,
+          racingLineLayer,
+          carPositionLayer,
+          selectedMarkerLayer,
+        ], // Add hover marker layer
         controls: defaultControls({ zoom: false, rotate: false }),
         view: new View({
           projection: projection,
           center: getCenter(extent),
           zoom: 2,
-          rotation: 0, // No rotation
+          rotation: 0,
           maxZoom: 8,
           minZoom: 1,
           extent: [
@@ -247,20 +322,6 @@ export default function TelemetryDashboard(): JSX.Element {
       }
     };
   }, []);
-
-  // Get session and lap from URL parameters on initial load
-  useEffect(() => {
-    const sessionFromUrl = searchParams.get("session");
-    const lapFromUrl = searchParams.get("lap");
-
-    if (sessionFromUrl) {
-      setSessionId(sessionFromUrl);
-    }
-
-    if (lapFromUrl) {
-      setLapId(lapFromUrl);
-    }
-  }, [searchParams]);
 
   // Update URL when session or lap changes
   useEffect(() => {
@@ -415,126 +476,269 @@ export default function TelemetryDashboard(): JSX.Element {
     setIsLoading(false);
   };
 
-  // Use SVG path data to map lap distance to coordinates with an offset for proper racing line
-  const mapLapDistanceToCoordinates = (
-    lapDistPct: number,
-    isRacingLine: boolean = true
-  ): [number, number] => {
-    if (!trackPath || !svgContainerRef.current) {
-      // Default coordinates for Monza start/finish straight
-      return [1115, 768];
+  // Detect and find the start-finish line position
+  const findStartFinishPosition = (
+    pathElement: SVGPathElement,
+    telemetryData: TelemetryDataPoint[]
+  ): number => {
+    // Try to find points near 0% and 100% lap distance
+    const nearZero = telemetryData.filter(
+      (p) => p.LapDistPct < 1 || p.LapDistPct > 99
+    );
+
+    if (nearZero.length === 0) {
+      // Default to 0 if no clear start/finish
+      return 0;
+    }
+
+    // Find the average lap distance of points near 0%
+    const avgPosition =
+      nearZero.reduce(
+        (sum, p) => sum + (p.LapDistPct > 90 ? 0 : p.LapDistPct),
+        0
+      ) / nearZero.length;
+
+    // Convert to offset percentage (negative value)
+    return -avgPosition;
+  };
+
+  // Calculate racing line coordinates with vertical position adjustment
+  const calculateRacingLineCoordinates = (
+    telemetryData: TelemetryDataPoint[]
+  ): TelemetryDataPoint[] => {
+    if (!trackPath || !svgContainerRef.current || telemetryData.length === 0) {
+      return telemetryData;
     }
 
     try {
       const pathElement = svgContainerRef.current.querySelector(
         "#track-outline"
       ) as SVGPathElement;
-      if (!pathElement) return [1115, 768];
+      if (!pathElement) return telemetryData;
 
+      // Get track path total length
       const totalLength = pathElement.getTotalLength();
-      const position = (lapDistPct / 100) * totalLength;
-      const point = pathElement.getPointAtLength(position);
 
-      if (!isRacingLine) {
-        // Return exact path position for car marker
-        return [point.x, point.y];
-      }
+      // Fine-tune values for Monza
+      const rotationAngle = 90; // Keep the working rotation
+      const insideTrackFactor = 1; // Positive to keep line inside track
 
-      // Get points before and after to determine direction
-      const stepSize = totalLength / 100;
-      const prevPosition = Math.max(0, position - stepSize);
-      const nextPosition = Math.min(totalLength, position + stepSize);
+      // Now map each telemetry point to track coordinates
+      return telemetryData.map((point) => {
+        // Get position on track path
+        const position = (point.LapDistPct / 100) * totalLength;
+        const basePoint = pathElement.getPointAtLength(position);
 
-      const prevPoint = pathElement.getPointAtLength(prevPosition);
-      const nextPoint = pathElement.getPointAtLength(nextPosition);
+        // Calculate racing line offset based on driving inputs
+        let offsetX = 0;
+        let offsetY = 0;
 
-      // Calculate direction vector
-      const dirX = nextPoint.x - prevPoint.x;
-      const dirY = nextPoint.y - prevPoint.y;
+        // Use steering to determine racing line offset
+        const steeringFactor = point.SteeringWheelAngle / 50;
 
-      // Normalize the vector
-      const length = Math.sqrt(dirX * dirX + dirY * dirY);
-      const normDirX = length > 0 ? dirX / length : 0;
-      const normDirY = length > 0 ? dirY / length : 0;
+        if (Math.abs(steeringFactor) > 0.1) {
+          // Get direction along track
+          const stepSize = totalLength / 200;
+          const prevPosition = Math.max(0, position - stepSize);
+          const nextPosition = Math.min(totalLength, position + stepSize);
 
-      // Get perpendicular vector (90 degrees counter-clockwise)
-      const perpDirX = -normDirY;
-      const perpDirY = normDirX;
+          const prevPoint = pathElement.getPointAtLength(prevPosition);
+          const nextPoint = pathElement.getPointAtLength(nextPosition);
 
-      // Apply offset for racing line (inside of corners)
-      // Determine the racing line offset based on track position
-      // Monza needs specific offsets for different sections
-      let offset = 25; // Default offset
+          // Calculate direction
+          const dirX = nextPoint.x - prevPoint.x;
+          const dirY = nextPoint.y - prevPoint.y;
+          const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
+          const normDirX = dirLength > 0 ? dirX / dirLength : 0;
+          const normDirY = dirLength > 0 ? dirY / dirLength : 0;
 
-      // Change the sign to flip the racing line
-      const flipFactor = -0.5;
+          // Get perpendicular vector
+          const perpDirX = -normDirY;
+          const perpDirY = normDirX;
 
-      // Return point with offset
-      return [
-        point.x + perpDirX * offset * flipFactor,
-        point.y + perpDirY * offset * flipFactor,
-      ];
+          // Calculate offset magnitude based on driving factors
+          const speedFactor = point.Speed / 250;
+          const throttleFactor = point.Throttle / 100;
+          const brakeFactor = point.Brake / 100;
+
+          // Use a smaller overall offset to keep line inside track
+          let offsetMagnitude = Math.min(18, Math.abs(steeringFactor * 50));
+
+          // Speed influence
+          offsetMagnitude *= 1 + speedFactor * 0.8;
+
+          // Braking influence
+          if (brakeFactor > 0.3) {
+            offsetMagnitude *= 1 - brakeFactor * 0.2;
+          }
+
+          // Throttle influence
+          if (throttleFactor > 0.7 && Math.abs(steeringFactor) > 0.2) {
+            offsetMagnitude *= 1 + throttleFactor * 0.1;
+          }
+
+          // Apply offset with sign to keep line inside track
+          offsetX =
+            perpDirX *
+            offsetMagnitude *
+            Math.sign(steeringFactor) *
+            insideTrackFactor;
+          offsetY =
+            perpDirY *
+            offsetMagnitude *
+            Math.sign(steeringFactor) *
+            insideTrackFactor;
+        }
+
+        // Apply rotation to match map orientation
+        const radians = (rotationAngle * Math.PI) / 180;
+        const rotatedX =
+          (basePoint.x + offsetX) * Math.cos(radians) -
+          (basePoint.y + offsetY) * Math.sin(radians);
+        const rotatedY =
+          (basePoint.x + offsetX) * Math.sin(radians) +
+          (basePoint.y + offsetY) * Math.cos(radians);
+
+        // Apply vertical position adjustment
+        const finalX = rotatedX;
+        const finalY = rotatedY + 700; // Apply vertical offset
+
+        // Return coordinates
+        return {
+          ...point,
+          coordinates: [finalY, finalX] as [number, number],
+        };
+      });
     } catch (error) {
-      console.error("Error mapping lap distance to coordinates:", error);
-      return [1115, 768]; // Fallback to default position
+      console.error("Error calculating racing line coordinates:", error);
+      return telemetryData;
     }
   };
 
-  // Generate racing line with varying offsets to follow proper racing line
-  const generateRacingLine = (sortedData: TelemetryDataPoint[]): number[][] => {
-    if (!trackPath) return [];
-
-    const totalLength = trackPath.getTotalLength();
-    const numPoints = 200; // Use more points for a smoother line
-    const coordinates: number[][] = [];
-
-    // Use equal spacing around the track for a smoother line
-    for (let i = 0; i < numPoints; i++) {
-      const lapPct = (i / numPoints) * 100;
-
-      // Use custom offsets for different track sections to follow racing line
-      let offsetMultiplier = 1.0;
-
-      // Adjust offset for different sections of Monza
-      if (lapPct < 5 || lapPct > 95) {
-        // Start/finish straight - smaller offset
-        offsetMultiplier = 0.5;
-      } else if (lapPct > 10 && lapPct < 20) {
-        // First chicane - large offset
-        offsetMultiplier = 1.5;
-      } else if (lapPct > 30 && lapPct < 40) {
-        // Lesmo corners - medium-large offset
-        offsetMultiplier = 1.2;
-      } else if (lapPct > 50 && lapPct < 60) {
-        // Ascari chicane - largest offset
-        offsetMultiplier = 1.8;
-      } else if (lapPct > 70 && lapPct < 90) {
-        // Parabolica - gradually decreasing offset
-        offsetMultiplier = 1.4 - ((lapPct - 70) / 20) * 0.9;
-      }
-
-      // Apply custom offset to create a more realistic racing line
-      coordinates.push(mapLapDistanceToCoordinates(lapPct));
+  // Update the racing line rendering effect - stays the same as before
+  const dataWithCoordinates = useMemo(() => {
+    if (!telemetryData.length || !trackPath || !svgContainerRef.current) {
+      return [];
     }
 
-    // Ensure the line is closed
-    if (coordinates.length > 0) {
-      coordinates.push(coordinates[0]);
+    try {
+      // Get the path element
+      const pathElement = svgContainerRef.current.querySelector(
+        "#track-outline"
+      ) as SVGPathElement;
+      if (!pathElement) return [];
+
+      // Get track path total length
+      const totalLength = pathElement.getTotalLength();
+
+      // Fine-tune values for Monza
+      const rotationAngle = 90; // Keep the working rotation
+      const insideTrackFactor = 1; // Positive to keep line inside track
+      const verticalOffset = -120; // Adjust this value to move racing line up/down
+
+      // Calculate coordinates for all points at once
+      return telemetryData.map((point) => {
+        // Get position on track path
+        const position = (point.LapDistPct / 100) * totalLength;
+        const basePoint = pathElement.getPointAtLength(position);
+
+        // Calculate racing line offset based on driving inputs
+        let offsetX = 0;
+        let offsetY = 0;
+
+        // Use steering to determine racing line offset
+        const steeringFactor = point.SteeringWheelAngle / 15;
+
+        if (Math.abs(steeringFactor) > 0.1) {
+          // Get direction along track
+          const stepSize = totalLength / 200;
+          const prevPosition = Math.max(0, position - stepSize);
+          const nextPosition = Math.min(totalLength, position + stepSize);
+
+          const prevPoint = pathElement.getPointAtLength(prevPosition);
+          const nextPoint = pathElement.getPointAtLength(nextPosition);
+
+          // Calculate direction
+          const dirX = nextPoint.x - prevPoint.x;
+          const dirY = nextPoint.y - prevPoint.y;
+          const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
+          const normDirX = dirLength > 0 ? dirX / dirLength : 0;
+          const normDirY = dirLength > 0 ? dirY / dirLength : 0;
+
+          // Get perpendicular vector
+          const perpDirX = -normDirY;
+          const perpDirY = normDirX;
+
+          // Calculate offset magnitude based on driving factors
+          const speedFactor = point.Speed / 250;
+          const throttleFactor = point.Throttle / 100;
+          const brakeFactor = point.Brake / 100;
+
+          // Use a smaller overall offset to keep line inside track
+          let offsetMagnitude = Math.min(18, Math.abs(steeringFactor * 12));
+
+          // Speed influence
+          offsetMagnitude *= 1 + speedFactor * 0.3;
+
+          // Braking influence
+          if (brakeFactor > 0.3) {
+            offsetMagnitude *= 1 - brakeFactor * 0.2;
+          }
+
+          // Throttle influence
+          if (throttleFactor > 0.7 && Math.abs(steeringFactor) > 0.2) {
+            offsetMagnitude *= 1 + throttleFactor * 0.1;
+          }
+
+          // Apply offset with sign to keep line inside track
+          offsetX =
+            perpDirX *
+            offsetMagnitude *
+            Math.sign(steeringFactor) *
+            insideTrackFactor;
+          offsetY =
+            perpDirY *
+            offsetMagnitude *
+            Math.sign(steeringFactor) *
+            insideTrackFactor;
+        }
+
+        // Apply rotation to match map orientation
+        const radians = (rotationAngle * Math.PI) / 180;
+        const rotatedX =
+          (basePoint.x + offsetX) * Math.cos(radians) -
+          (basePoint.y + offsetY) * Math.sin(radians);
+        const rotatedY =
+          (basePoint.x + offsetX) * Math.sin(radians) +
+          (basePoint.y + offsetY) * Math.cos(radians);
+
+        // Apply vertical position adjustment
+        const finalX = rotatedX;
+        const finalY = rotatedY + verticalOffset; // Apply vertical offset
+
+        // Return data point with calculated coordinates
+        return {
+          ...point,
+          coordinates: [finalY, finalX] as [number, number],
+        };
+      });
+    } catch (error) {
+      console.error("Error calculating coordinates:", error);
+      return [];
     }
+  }, [telemetryData, svgLoaded, trackPath]);
 
-    return coordinates;
-  };
-
-  // Update racing line and car position when telemetry data changes
+  // Update the useEffect to render the racing line with the pre-calculated coordinates
   useEffect(() => {
     if (
       !mapInitialized ||
       !olMapRef.current ||
-      !telemetryData.length ||
       !racingLineSourceRef.current ||
       !carPositionSourceRef.current ||
+      !selectedMarkerSourceRef.current ||
       !svgLoaded ||
-      !trackPath
+      !trackPath ||
+      dataWithCoordinates.length === 0
     ) {
       return;
     }
@@ -544,50 +748,137 @@ export default function TelemetryDashboard(): JSX.Element {
     carPositionSourceRef.current.clear();
 
     try {
-      // Sort data by lap distance percentage
-      const sortedData = [...telemetryData].sort(
-        (a, b) => a.LapDistPct - b.LapDistPct
-      );
+      // Extract coordinates for the racing line
+      const lineCoordinates = dataWithCoordinates
+        .filter((point) => point.coordinates)
+        .map((point) => point.coordinates as [number, number]);
 
-      // Generate racing line with proper offsets for a realistic line
-      const coordinates = generateRacingLine(sortedData);
-
-      // Create racing line feature
-      const lineFeature = new Feature({
-        geometry: new LineString(coordinates),
-      });
-
-      racingLineSourceRef.current.addFeature(lineFeature);
-
-      // Find point for car position (near start/finish line)
-      const startFinishPoint = sortedData[0];
-
-      // Use exact track path for car position (no offset)
-      const carPosition = mapLapDistanceToCoordinates(
-        startFinishPoint.LapDistPct,
-        true
-      );
-
-      // Create car position feature
-      const carFeature = new Feature({
-        geometry: new Point(carPosition),
-      });
-
-      carPositionSourceRef.current.addFeature(carFeature);
-
-      // Fit view to racing line
-      const geo = lineFeature.getGeometry();
-      if (geo) {
-        olMapRef.current.getView().fit(geo.getExtent(), {
-          padding: [50, 50, 50, 50],
-          duration: 1000,
+      if (lineCoordinates.length > 0) {
+        // Create racing line feature
+        const lineFeature = new Feature({
+          geometry: new LineString(lineCoordinates),
         });
+
+        // Add racing line to source
+        racingLineSourceRef.current.addFeature(lineFeature);
+
+        // Find the start point for car marker (closest to 0% lap distance)
+        const startPoints = dataWithCoordinates.filter((p) => p.LapDistPct < 1);
+        const carPoint =
+          startPoints.length > 0 ? startPoints[0] : dataWithCoordinates[0];
+
+        if (carPoint.coordinates) {
+          // Create car position feature
+          const carFeature = new Feature({
+            geometry: new Point(carPoint.coordinates),
+          });
+
+          carPositionSourceRef.current.addFeature(carFeature);
+        }
+
+        // Fit view to racing line (only on initial load)
+        if (!isScrubbing) {
+          const geo = lineFeature.getGeometry();
+          if (geo) {
+            olMapRef.current.getView().fit(geo.getExtent(), {
+              padding: [50, 50, 50, 50],
+              duration: 1000,
+            });
+          }
+        }
       }
     } catch (error) {
       console.error("Error rendering racing line:", error);
     }
-  }, [telemetryData, mapInitialized, svgLoaded, trackPath]);
+  }, [dataWithCoordinates, mapInitialized, svgLoaded, trackPath, isScrubbing]);
 
+  // Add a separate effect to update the selected point marker
+  // This is separate to avoid re-rendering the entire racing line when scrubbing
+  useEffect(() => {
+    if (
+      !selectedMarkerSourceRef.current ||
+      dataWithCoordinates.length === 0 ||
+      selectedPointIndex >= dataWithCoordinates.length
+    ) {
+      return;
+    }
+
+    // Clear previous marker
+    selectedMarkerSourceRef.current.clear();
+
+    // Get the selected point
+    const selectedPoint = dataWithCoordinates[selectedPointIndex];
+
+    if (selectedPoint && selectedPoint.coordinates) {
+      // Create marker feature
+      const markerFeature = new Feature({
+        geometry: new Point(selectedPoint.coordinates),
+      });
+
+      // Add marker to source
+      selectedMarkerSourceRef.current.addFeature(markerFeature);
+
+      // Update the information display
+      // You might want to set additional state here to show details about this point
+    }
+  }, [selectedPointIndex, dataWithCoordinates]);
+
+  // Create a performant scrubber component
+  const TelemetryScrubber = ({
+    data,
+    selectedIndex,
+    onIndexChange,
+  }: {
+    data: TelemetryDataPoint[];
+    selectedIndex: number;
+    onIndexChange: (index: number) => void;
+  }) => {
+    // Scrubber input is separate from the chart to improve performance
+    const handleScrubberChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        const index = parseInt(e.target.value, 10);
+        onIndexChange(index);
+      },
+      [onIndexChange]
+    );
+
+    // Only create the labels once for better performance
+    const timeLabels = useMemo(() => {
+      if (!data.length) return [];
+      const startTime = data[0].sessionTime;
+      const endTime = data[data.length - 1].sessionTime;
+
+      return [
+        startTime.toFixed(2) + "s",
+        ((endTime - startTime) / 2 + startTime).toFixed(2) + "s",
+        endTime.toFixed(2) + "s",
+      ];
+    }, [data]);
+
+    return (
+      <div className="py-4">
+        <div className="flex justify-between text-gray-400 text-xs mb-1">
+          {timeLabels.map((label, i) => (
+            <span key={i} className={i === 1 ? "flex-1 text-center" : ""}>
+              {label}
+            </span>
+          ))}
+        </div>
+        <input
+          type="range"
+          min="0"
+          max={data.length > 0 ? data.length - 1 : 0}
+          value={selectedIndex}
+          onChange={handleScrubberChange}
+          onMouseDown={() => setIsScrubbing(true)}
+          onMouseUp={() => setIsScrubbing(false)}
+          onTouchStart={() => setIsScrubbing(true)}
+          onTouchEnd={() => setIsScrubbing(false)}
+          className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+        />
+      </div>
+    );
+  };
   // Map zoom controls
   const handleZoomIn = (): void => {
     if (olMapRef.current) {
@@ -731,7 +1022,9 @@ export default function TelemetryDashboard(): JSX.Element {
           selectedMetric={selectedMetric}
           setSelectedMetric={setSelectedMetric}
           availableMetrics={availableMetrics}
-          telemetryData={telemetryData}
+          telemetryData={dataWithCoordinates}
+          selectedIndex={selectedPointIndex}
+          onIndexChange={setSelectedPointIndex}
         />
       </div>
 
