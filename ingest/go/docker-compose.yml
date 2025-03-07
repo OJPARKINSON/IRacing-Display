@@ -31,6 +31,11 @@ services:
       nofile:
         soft: 65536
         hard: 65536
+    deploy:
+      resources:
+        limits:
+          cpus: ".3"
+          memory: 1G
 
   go_app:
     build: .
@@ -66,11 +71,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2"
+          cpus: ".3"
           memory: 1G
-        reservations:
-          cpus: "1"
-          memory: 512M
 
 secrets:
   influxdb-admin-username:

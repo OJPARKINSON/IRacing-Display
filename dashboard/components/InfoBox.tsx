@@ -1,4 +1,4 @@
-import { TelemetryDataPoint } from "@/app/page";
+import { TelemetryDataPoint } from "@/lib/types";
 import { useMemo, useCallback } from "react";
 import {
   ResponsiveContainer,
@@ -51,7 +51,6 @@ export const InfoBox = ({ telemetryData, lapId }: InfoBoxProps) => {
   );
 };
 
-// Updated TelemetryChart component with scrubbing support
 export const TelemetryChart = ({
   selectedMetric,
   setSelectedMetric,
@@ -75,7 +74,6 @@ export const TelemetryChart = ({
     }));
   }, [telemetryData]);
 
-  // Handle clicking on chart
   const handleChartClick = useCallback(
     (data: any) => {
       if (data && data.activeTooltipIndex !== undefined) {
@@ -85,23 +83,43 @@ export const TelemetryChart = ({
     [onIndexChange]
   );
 
-  // Handle moving the mouse over the chart
-  const handleMouseMove = useCallback((e: any) => {
-    if (e.isTooltipActive && e.activeTooltipIndex !== undefined) {
-      // Optional: You could update on mousemove too, but it might be too sensitive
-      // Uncomment the next line if you want position updates on hover
-      // onIndexChange(e.activeTooltipIndex);
-    }
-  }, []);
+  const handleMouseMove = useCallback(() => {}, []);
 
+  // Add handler to identify low speed points (corners)
+  const getLowSpeedStyle = (data: any, dataKey: string) => {
+    // Calculate 40% of max speed
+    const maxSpeed = Math.max(...chartData.map((p) => p.Speed));
+    const lowSpeedThreshold = maxSpeed * 0.4;
+
+    if (data && data[dataKey] && data.Speed < lowSpeedThreshold) {
+      return { stroke: "#f56565", strokeWidth: 3 }; // Highlight low speed portions
+    }
+    return null;
+  };
+
+  // Safe access to data properties with type checking
   const getDataValue = (point: TelemetryDataPoint, key: string): number => {
-    console.log("point", point);
-    console.log("key", key);
-    if (point !== undefined && key in point) {
+    if (key in point) {
       return (point as any)[key] as number;
     }
     return 0;
   };
+
+  // Find low speed points for visualization
+  const lowSpeedPoints = useMemo(() => {
+    if (!chartData.length) return [];
+
+    const maxSpeed = Math.max(...chartData.map((p) => p.Speed));
+    const threshold = maxSpeed * 0.4;
+
+    return chartData
+      .filter((point) => point.Speed < threshold)
+      .map((point) => ({
+        x: point.sessionTime,
+        y: getDataValue(point, selectedMetric),
+        index: point.index,
+      }));
+  }, [chartData, selectedMetric]);
 
   return (
     <div className="bg-gray-800 p-4 rounded-lg">
@@ -132,7 +150,7 @@ export const TelemetryChart = ({
           >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
-              dataKey="sessionTime"
+              dataKey="SessionTime"
               label={{
                 value: "Session Time (s)",
                 position: "insideBottom",
@@ -145,13 +163,21 @@ export const TelemetryChart = ({
             <Tooltip
               content={({ active, payload }) => {
                 if (active && payload && payload.length) {
+                  const dataPoint = payload[0].payload as TelemetryDataPoint;
                   return (
                     <div className="bg-gray-700 p-2 rounded shadow">
                       <p className="text-gray-300">
-                        Time: {payload[0].payload.sessionTime.toFixed(2)}s
+                        Time: {dataPoint.sessionTime.toFixed(2)}s
                       </p>
                       <p className="text-red-400">
-                        {selectedMetric}: {payload[0].value}
+                        {selectedMetric}:{" "}
+                        {getDataValue(dataPoint, selectedMetric).toFixed(2)}
+                      </p>
+                      <p className="text-gray-300">
+                        LapDistPct: {dataPoint.LapDistPct.toFixed(2)}%
+                      </p>
+                      <p className="text-gray-300">
+                        Speed: {dataPoint.Speed.toFixed(2)}
                       </p>
                     </div>
                   );
@@ -159,28 +185,55 @@ export const TelemetryChart = ({
                 return null;
               }}
             />
-            <Line
-              type="monotone"
-              dataKey={selectedMetric}
-              stroke="#ff6565"
-              dot={false} // No dots for better performance with large datasets
-              activeDot={{
-                r: 6,
-                fill: "#ff0000",
-                onClick: (dotProps: any) => {
-                  const index = (dotProps as any).index;
-                  if (typeof index === "number") {
-                    onIndexChange(index);
-                  }
-                },
-              }}
-            />
+
+            {/* Low speed segments highlighted */}
+            {selectedMetric === "Speed" && (
+              <Line
+                type="monotone"
+                dataKey={selectedMetric}
+                stroke="#ff6565"
+                dot={false}
+                isAnimationActive={false}
+                activeDot={{
+                  r: 6,
+                  fill: "#ff0000",
+                  onClick: (dotProps: any) => {
+                    const index = dotProps.index;
+                    if (typeof index === "number") {
+                      onIndexChange(index);
+                    }
+                  },
+                }}
+              />
+            )}
+
+            {/* Regular line for other metrics */}
+            {selectedMetric !== "Speed" && (
+              <Line
+                type="monotone"
+                dataKey={selectedMetric}
+                stroke="#ff6565"
+                dot={false}
+                isAnimationActive={false}
+                activeDot={{
+                  r: 6,
+                  fill: "#ff0000",
+                  onClick: (dotProps: any) => {
+                    const index = dotProps.index;
+                    if (typeof index === "number") {
+                      onIndexChange(index);
+                    }
+                  },
+                }}
+              />
+            )}
+
             {/* Current point indicator */}
             {selectedIndex !== null &&
               selectedIndex >= 0 &&
               selectedIndex < chartData.length && (
                 <ReferenceDot
-                  x={chartData[selectedIndex]?.sessionTime}
+                  x={chartData[selectedIndex].sessionTime}
                   y={getDataValue(chartData[selectedIndex], selectedMetric)}
                   r={8}
                   fill="#00ffff"
@@ -191,20 +244,24 @@ export const TelemetryChart = ({
         </ResponsiveContainer>
       </div>
 
-      {/* Metric info boxes */}
+      {/* Metric info boxes with additional information */}
       <div className="grid grid-cols-2 gap-2 mt-4">
         <div className="bg-gray-700 p-2 rounded">
-          <p className="text-sm text-gray-400">Lap</p>
+          <p className="text-sm text-gray-400">Brake</p>
           <p className="font-semibold">
-            {telemetryData.length > 0 && selectedIndex !== null
-              ? Math.floor(telemetryData[selectedIndex].LapDistPct)
+            {telemetryData.length > 0 &&
+            selectedIndex !== null &&
+            selectedIndex >= 0
+              ? telemetryData[selectedIndex].Brake.toFixed(1)
               : "-"}
           </p>
         </div>
         <div className="bg-gray-700 p-2 rounded">
           <p className="text-sm text-gray-400">LapDistPct</p>
           <p className="font-semibold">
-            {telemetryData.length > 0 && selectedIndex !== null
+            {telemetryData.length > 0 &&
+            selectedIndex !== null &&
+            selectedIndex >= 0
               ? telemetryData[selectedIndex].LapDistPct.toFixed(1)
               : "-"}
           </p>
@@ -212,7 +269,9 @@ export const TelemetryChart = ({
         <div className="bg-gray-700 p-2 rounded">
           <p className="text-sm text-gray-400">Speed</p>
           <p className="font-semibold">
-            {telemetryData.length > 0 && selectedIndex !== null
+            {telemetryData.length > 0 &&
+            selectedIndex !== null &&
+            selectedIndex >= 0
               ? telemetryData[selectedIndex].Speed.toFixed(1)
               : "-"}
           </p>
@@ -220,7 +279,9 @@ export const TelemetryChart = ({
         <div className="bg-gray-700 p-2 rounded">
           <p className="text-sm text-gray-400">Throttle</p>
           <p className="font-semibold">
-            {telemetryData.length > 0 && selectedIndex !== null
+            {telemetryData.length > 0 &&
+            selectedIndex !== null &&
+            selectedIndex >= 0
               ? telemetryData[selectedIndex].Throttle.toFixed(1)
               : "-"}
           </p>

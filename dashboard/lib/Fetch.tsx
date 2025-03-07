@@ -1,29 +1,47 @@
-// import { SessionInfo } from "@/app/page";
-// import { SetStateAction } from "react";
-// import useSWR from "swr";
+import { TelemetryDataPoint, TelemetryResponse } from "./types";
 
-// const fetcher = (url: string) => fetch(url).then((res) => res.json());
+export const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-// const FetchSessions = async ({
-//   setError,
-// }: {
-//   setError: (value: React.SetStateAction<string | null>) => void;
-// }) => {
-//   const { data, error } = useSWR<SessionInfo[]>("/api/sessions", fetcher);
+export const telemetryFetcher = (url: string) => {
+  return fetch(url).then(async (r) => {
+    if (!r.ok) {
+      throw new Error(`Failed to fetch telemetry data: ${r.statusText}`);
+    } else {
+      const data = await r.json();
 
-//   if (error) {
-//     console.error("Error fetching sessions:", error.message);
-//     setError(error.message);
-//   }
+      return processData(data);
+    }
+  });
+};
 
-//   if (data && data.length > 0) {
-//     setAvailableSessions(data);
+const processData = (data: TelemetryResponse) => {
+  // Sort data by session_time to ensure correct order
+  const sortedData = [...data.data].sort((a, b) => {
+    const timeA = a.session_time !== undefined ? a.session_time : 0;
+    const timeB = b.session_time !== undefined ? b.session_time : 0;
+    return timeA - timeB;
+  });
 
-//     // Only set default session if not already set from URL
-//     if (!sessionId && data.length > 0) {
-//       setSessionId(data[0].bucket);
-//     }
-//   } else {
-//     setError("No sessions available");
-//   }
-// };
+  // Prepare telemetry data for charts
+  const processedData: TelemetryDataPoint[] = sortedData.map((d, i) => ({
+    index: i,
+    time: d._time || i,
+    sessionTime: d.session_time || 0,
+    Speed: d.speed || 0,
+    RPM: d.rpm || 0,
+    Throttle: (d.throttle || 0) * 100,
+    Brake: (d.brake || 0) * 100,
+    Gear: d.gear || 0,
+    LapDistPct: (d.lap_dist_pct || 0) * 100,
+    SteeringWheelAngle: d.steering_wheel_angle || 0,
+    Lat: d.lat || 0,
+    Lon: d.lon || 0,
+    VelocityX: d.velocity_x || 0,
+    VelocityY: d.velocity_y || 0,
+    FuelLevel: d.fuel_level || 0,
+    LapCurrentLapTime: d.lap_current_lap_time || 0,
+    PlayerCarPosition: d.player_car_position || 0,
+  }));
+
+  return processedData;
+};
