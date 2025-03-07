@@ -49,3 +49,9 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+// |> range(start: -30d)
+// |> filter(fn: (r) => r._measurement == "telemetry_ticks" and r.lap_id == "${lapId}")
+// |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+// |> drop(columns: ["_start", "_stop", "_measurement"])
+// |> sort(columns: ["session_time"])
