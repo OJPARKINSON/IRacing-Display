@@ -1,38 +1,6 @@
 version: "3.8"
 
 services:
-  # InfluxDB Service (reference to the existing service in your other compose file)
-  # You can remove this if you're connecting to an existing InfluxDB instance
-  influxdb:
-    image: influxdb:2
-    container_name: influxdb
-    restart: always
-    ports:
-      - "8086:8086"
-    environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME_FILE: /run/secrets/influxdb-admin-username
-      DOCKER_INFLUXDB_INIT_PASSWORD_FILE: /run/secrets/influxdb-admin-password
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE: /run/secrets/influxdb-admin-token
-      DOCKER_INFLUXDB_INIT_ORG: myorg
-      DOCKER_INFLUXDB_INIT_BUCKET: telemetry
-    secrets:
-      - influxdb-admin-username
-      - influxdb-admin-password
-      - influxdb-admin-token
-    volumes:
-      - influxdb2-data:/var/lib/influxdb2
-      - influxdb2-config:/etc/influxdb2
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    networks:
-      - telemetry-network
-
-  # Next.js Telemetry Dashboard
   telemetry-dashboard:
     build:
       context: .
@@ -51,14 +19,11 @@ services:
       NODE_ENV: production
       # Next.js specific settings
       NEXT_PUBLIC_APP_URL: http://localhost:3000
-    depends_on:
-      influxdb:
-        condition: service_healthy
     secrets:
       - influxdb-admin-token
     networks:
       - telemetry-network
-    # For development, you can mount your source code to enable hot reloading
+    # Hot reloading
     # volumes:
     #   - ./:/app
     #   - /app/node_modules
@@ -66,7 +31,8 @@ services:
 
 networks:
   telemetry-network:
-    driver: bridge
+    external: true
+    name: telemetry-network
 
 # Define secrets (should match with your existing InfluxDB setup)
 secrets:
@@ -76,7 +42,3 @@ secrets:
     file: ./.env.influxdb-admin-password
   influxdb-admin-token:
     file: ./.env.influxdb-admin-token
-
-volumes:
-  influxdb2-data:
-  influxdb2-config:

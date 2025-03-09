@@ -31,6 +31,8 @@ services:
       nofile:
         soft: 65536
         hard: 65536
+    networks:
+      - telemetry-network
     deploy:
       resources:
         limits:
@@ -44,6 +46,8 @@ services:
     depends_on:
       influxdb:
         condition: service_healthy
+    networks:
+      - telemetry-network
     environment:
       INFLUXDB_URL: http://influxdb:8086
       INFLUXDB_ORG: myorg
@@ -54,7 +58,7 @@ services:
       BATCH_TIMEOUT: "1s"
       MAX_RETRIES: "3"
       RETRY_DELAY: "500ms"
-      PARALLEL_GROUPS: "2"
+      PARALLEL_GROUPS: "4"
       BATCH_SIZE: "1000"
       # Golang performance tuning
       GOMAXPROCS: "0" # Let Go determine based on available CPUs
@@ -85,3 +89,8 @@ secrets:
 volumes:
   influxdb2-data:
   influxdb2-config:
+
+networks:
+  telemetry-network:
+    external: true
+    name: telemetry-network
