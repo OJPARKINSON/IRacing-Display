@@ -21,7 +21,7 @@ export function getToken(): string {
 
 // Get InfluxDB configuration
 export const influxConfig = {
-  url: process.env.INFLUXDB_URL || "http://192.168.0.72:8086",
+  url: process.env.INFLUXDB_URL || "http://influxdb:8086",
   token: getToken(),
   org: process.env.INFLUXDB_ORG || "myorg",
   bucket: process.env.INFLUXDB_BUCKET || "telemetry",

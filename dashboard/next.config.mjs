@@ -1,10 +1,7 @@
-// next.config.mjs
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "standalone", // Enables optimized Docker builds
-  experimental: {
-    serverComponentsExternalPackages: ["@influxdata/influxdb-client"], // Optimizes InfluxDB client loading
-  },
+  output: "standalone",
+  serverExternalPackages: ["@influxdata/influxdb-client"],
   async headers() {
     return [
       {
