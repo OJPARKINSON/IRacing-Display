@@ -306,7 +306,6 @@ export default function TrackMap({
     carPositionSourceRef,
   ]);
 
-  // Update selected marker position using LapDistPct
   useEffect(() => {
     if (!selectedMarkerSourceRef.current || dataWithCoordinates.length === 0) {
       return;
@@ -314,32 +313,24 @@ export default function TrackMap({
 
     selectedMarkerSourceRef.current.clear();
 
-    // Ensure index is in bounds
     const validIndex = Math.min(
       Math.max(0, selectedPointIndex),
       dataWithCoordinates.length - 1
     );
 
-    // Get the selected point's lap distance percentage
     const selectedPoint = dataWithCoordinates[validIndex] as TelemetryDataPoint;
 
     if (!selectedPoint) return;
 
-    // Get the lap distance percentage from the selected point
     const lapDistPct = selectedPoint.LapDistPct;
 
-    // CRITICAL FIX: Instead of using the point directly,
-    // find ALL points with similar lap distance
     const similarPoints = dataWithCoordinates.filter(
       (p) => Math.abs(p.LapDistPct - lapDistPct) < 1.0
     ) as TelemetryDataPoint[];
 
-    // If we have similar points, find the one with lowest speed (for corners)
-    // or the one closest to the exact lap distance
     let pointToDisplay = selectedPoint;
 
     if (similarPoints.length > 0) {
-      // For corners (low speed points), find the lowest speed point
       if (selectedPoint.Speed < 40) {
         pointToDisplay = similarPoints.reduce(
           (lowest, current) =>
@@ -347,7 +338,6 @@ export default function TrackMap({
           similarPoints[0]
         );
       } else {
-        // For regular points, find the closest lap distance match
         pointToDisplay = similarPoints.reduce(
           (closest, current) =>
             Math.abs(current.LapDistPct - lapDistPct) <
@@ -359,20 +349,11 @@ export default function TrackMap({
       }
     }
 
-    // Now create a marker at the best point's position
     if (pointToDisplay && pointToDisplay.coordinates) {
-      console.log("Displaying point:", {
-        index: dataWithCoordinates.indexOf(pointToDisplay),
-        original: validIndex,
-        lapDistPct: pointToDisplay.LapDistPct.toFixed(1),
-        speed: pointToDisplay.Speed.toFixed(1),
-      });
-
       const markerFeature = new Feature({
         geometry: new Point(pointToDisplay.coordinates),
       });
 
-      // Use a distinctive style for the selected marker
       markerFeature.setStyle(
         new Style({
           image: new Circle({
@@ -408,7 +389,7 @@ export default function TrackMap({
       if (isScrubbing && olMapRef.current) {
         olMapRef.current.getView().animate({
           center: pointToDisplay.coordinates,
-          duration: 100,
+          duration: 340,
         });
       }
     }
