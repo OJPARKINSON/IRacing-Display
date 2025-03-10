@@ -4,30 +4,34 @@ services:
   telemetry-dashboard:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: telemetry-dashboard
+      dockerfile: Dockerfile.dev
+    container_name: telemetry-dashboard-dev
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      # InfluxDB connection parameters
       INFLUXDB_URL: http://influxdb:8086
       INFLUXDB_TOKEN_FILE: /run/secrets/influxdb-admin-token
       INFLUXDB_ORG: myorg
       INFLUXDB_BUCKET: telemetry
-      NODE_ENV: production
+      NODE_ENV: development
       NEXT_PUBLIC_APP_URL: http://localhost:3000
+      WATCHPACK_POLLING: "true"
     secrets:
       - influxdb-admin-token
     networks:
       - telemetry-network
+    volumes:
+      - ./:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
 
 networks:
   telemetry-network:
     external: true
     name: telemetry-network
 
-# Define secrets (should match with your existing InfluxDB setup)
 secrets:
   influxdb-admin-username:
     file: ./.env.influxdb-admin-username

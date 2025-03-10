@@ -34,7 +34,7 @@ export default function HomePage() {
             className="w-full bg-gray-700 text-white p-2 rounded"
             disabled={data !== undefined && data.length === 0}
           >
-            {data !== undefined && data.length < 0 ? (
+            {data !== undefined && data.length > 0 ? (
               <>
                 <option value="" disabled>
                   Select a session

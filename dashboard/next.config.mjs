@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "standalone",
+  output: process.env.NODE_ENV === "production" ? "standalone" : undefined,
   serverExternalPackages: ["@influxdata/influxdb-client"],
+  reactStrictMode: true,
   async headers() {
     return [
       {
@@ -22,6 +23,18 @@ const nextConfig = {
         ],
       },
     ];
+  },
+
+  webpack: (config, { isServer, dev }) => {
+    // For hot reloading in Docker
+    if (dev && !isServer) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        poll: 1000,
+        aggregateTimeout: 300,
+      };
+    }
+    return config;
   },
 };
 

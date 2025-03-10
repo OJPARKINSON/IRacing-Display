@@ -26,15 +26,7 @@ export function useTrackPosition(telemetryData: TelemetryDataPoint[]) {
       const clickedPoint = telemetryData[index];
       setSelectedIndex(index);
 
-      // Store the exact lap percentage for track positioning
       setSelectedLapPct(clickedPoint.LapDistPct);
-
-      // Log for debugging
-      console.log(
-        `Selected point at index ${index} with LapDistPct: ${clickedPoint.LapDistPct.toFixed(
-          2
-        )}, Speed: ${clickedPoint.Speed.toFixed(2)}`
-      );
     },
     [telemetryData]
   );

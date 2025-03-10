@@ -16,6 +16,9 @@ export async function GET(): Promise<
     const buck = new BucketsAPI(client);
     const bucketList = await buck.getBuckets();
 
+    console.log(`Found ${bucketList.buckets?.length} unique sessions`);
+    console.log(bucketList.buckets);
+
     const sessionBuckets: SessionInfo[] = [];
 
     const bucketPrefix = `${influxConfig.bucket}_`;

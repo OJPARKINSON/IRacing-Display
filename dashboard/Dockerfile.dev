@@ -1,0 +1,29 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install dependencies
+RUN npm ci
+
+# No need to copy source files - we'll mount them as volumes
+# This improves build time for development
+
+# Turn off telemetry
+ENV NEXT_TELEMETRY_DISABLED 1
+
+# Expose development port
+EXPOSE 3000
+
+# Set development environment
+ENV NODE_ENV development
+ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
+
+# Enable polling for file changes in Docker
+ENV WATCHPACK_POLLING true
+
+# Start development server
+CMD ["npm", "run", "dev"]
