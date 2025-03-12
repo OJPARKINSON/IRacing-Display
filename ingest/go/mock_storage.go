@@ -21,11 +21,10 @@ var (
 	InfluxDBOrg    = getEnv("INFLUXDB_ORG", "myorg")
 	InfluxDBBucket = getEnv("INFLUXDB_BUCKET", "racing_telemetry") // Base bucket name
 	// Configuration for optimized batch processing
-	MaxBatchSize       = getEnvAsInt("MAX_BATCH_SIZE", 100)
-	BatchTimeout       = getEnvAsDuration("BATCH_TIMEOUT", 10*time.Second)
-	MaxRetries         = getEnvAsInt("MAX_RETRIES", 3)
-	RetryDelay         = getEnvAsDuration("RETRY_DELAY", 500*time.Millisecond)
-	UseSeparateBuckets = getEnvAsBool("USE_SEPARATE_BUCKETS", true)
+	MaxBatchSize = getEnvAsInt("MAX_BATCH_SIZE", 100)
+	BatchTimeout = getEnvAsDuration("BATCH_TIMEOUT", 10*time.Second)
+	MaxRetries   = getEnvAsInt("MAX_RETRIES", 3)
+	RetryDelay   = getEnvAsDuration("RETRY_DELAY", 500*time.Millisecond)
 )
 
 // TelemetryPoint represents a single point of telemetry data
@@ -68,83 +67,54 @@ type storage struct {
 	maxBufferSize int
 }
 
-// Connect establishes the connection to InfluxDB
 func (s *storage) Connect() error {
-	// Determine the bucket name
-	if UseSeparateBuckets {
-		s.bucketName = fmt.Sprintf("%s_%s", InfluxDBBucket, s.sessionID)
+	s.bucketName = fmt.Sprintf("%s_%s", InfluxDBBucket, s.sessionID)
 
-		// Create bucket if it doesn't exist
-		err := s.createBucketIfNotExists(s.bucketName)
+	bucketsAPI := s.client.BucketsAPI()
+
+	_, err := bucketsAPI.FindBucketByName(context.Background(), s.bucketName)
+	if err != nil {
+		org, err := s.client.OrganizationsAPI().FindOrganizationByName(context.Background(), InfluxDBOrg)
 		if err != nil {
-			log.Printf("Warning: Failed to create bucket %s: %v, using main bucket", s.bucketName, err)
-			s.bucketName = InfluxDBBucket
-		} else {
-			log.Printf("Using session-specific bucket: %s", s.bucketName)
+			return fmt.Errorf("failed to find organization %s: %w", InfluxDBOrg, err)
 		}
-	} else {
-		s.bucketName = InfluxDBBucket
+
+		_, err = bucketsAPI.CreateBucketWithName(
+			context.Background(),
+			org,
+			s.bucketName,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create bucket %s: %w", s.bucketName, err)
+		}
+
+		log.Printf("Created new bucket: %s with 30-day retention", s.bucketName)
 	}
 
-	// Initialize write API for the bucket
 	s.writeAPIs[s.bucketName] = s.client.WriteAPI(InfluxDBOrg, s.bucketName)
 
-	// Validate connection
 	health, err := s.client.Health(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to connect to InfluxDB: %w", err)
 	}
 
-	log.Printf("Connected to InfluxDB %s with session: %s, bucket: %s", health.Version, s.sessionID, s.bucketName)
+	log.Printf("Connected to InfluxDB %s with session: %s, bucket: %s", *health.Version, s.sessionID, s.bucketName)
 
-	// Start error handling goroutine
 	s.wg.Add(1)
 	go s.handleErrors()
 
 	return nil
 }
 
-// createBucketIfNotExists creates a new bucket if it doesn't already exist
-func (s *storage) createBucketIfNotExists(bucketName string) error {
-	// Using the API client to manage buckets
-	bucketsAPI := s.client.BucketsAPI()
-
-	// Check if bucket exists
-	_, err := bucketsAPI.FindBucketByName(context.Background(), bucketName)
-	if err != nil {
-		// Find the organization by name
-		org, err := s.client.OrganizationsAPI().FindOrganizationByName(context.Background(), InfluxDBOrg)
-		if err != nil {
-			return fmt.Errorf("failed to find organization %s: %w", InfluxDBOrg, err)
-		}
-
-		// Create a new bucket with a 30-day retention policy
-		_, err = bucketsAPI.CreateBucketWithName(
-			context.Background(),
-			org,
-			bucketName,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create bucket %s: %w", bucketName, err)
-		}
-
-		log.Printf("Created new bucket: %s with 30-day retention", bucketName)
-	}
-	return nil
-}
-
-// newStorage creates a new storage instance with optimized settings
-func newStorage() *storage {
-	// Hide token in logs for security
+func newStorage(sessionId string) *storage {
 	log.Printf("Connecting to InfluxDB at %s", InfluxDBURL)
 
-	// Create client with timeout options
 	options := influxdb2.DefaultOptions()
 	options.SetBatchSize(uint(MaxBatchSize))
 	options.SetFlushInterval(uint(BatchTimeout.Milliseconds()))
 	options.SetRetryInterval(uint(RetryDelay.Milliseconds()))
 	options.SetMaxRetries(uint(MaxRetries))
-	options.SetHTTPRequestTimeout(30000) // 30 seconds timeout
+	options.SetHTTPRequestTimeout(30000)
 
 	client := influxdb2.NewClientWithOptions(InfluxDBURL, InfluxDBToken, options)
 
@@ -153,10 +123,10 @@ func newStorage() *storage {
 	return &storage{
 		client:        client,
 		writeAPIs:     make(map[string]api.WriteAPI),
-		sessionID:     generateSessionID(),
+		sessionID:     sessionId,
 		ctx:           ctx,
 		cancel:        cancel,
-		errorCh:       make(chan error, 100), // Buffer for error handling
+		errorCh:       make(chan error, 100),
 		pointsBuffer:  make([]*write.Point, 0, MaxBatchSize),
 		maxBufferSize: MaxBatchSize,
 	}
@@ -354,8 +324,8 @@ func (s *storage) flushBuffer() {
 		writeAPI.WritePoint(point)
 	}
 
-	log.Printf("Flushed %d points to InfluxDB for session %s (%.2f points/sec)",
-		s.bufferSize, s.sessionID)
+	log.Printf("Flushed %d points to InfluxDB for session %s (%d points/sec)",
+		s.bufferSize, s.sessionID, len(s.pointsBuffer))
 
 	// Reset buffer
 	s.pointsBuffer = s.pointsBuffer[:0]

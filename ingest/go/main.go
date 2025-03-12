@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -57,16 +58,15 @@ func main() {
 		log.Fatalf("Failed to parse stubs for %v: %v", files, err)
 	}
 
-	// Ensure stubs are not empty
 	if len(stubs) == 0 {
 		log.Println("No telemetry data found in IBT file.")
 		return
 	}
 
-	log.Printf("Parsed %d stubs", len(stubs))
+	headers := stubs[0].Headers()
+	WeekendInfo := headers.SessionInfo.WeekendInfo
 
-	// Initialize InfluxDB storage
-	storage := newStorage()
+	storage := newStorage(strconv.Itoa(WeekendInfo.SubSessionID))
 	if err := storage.Connect(); err != nil {
 		log.Fatal(err)
 	}
@@ -77,9 +77,14 @@ func main() {
 		}
 	}()
 
-	// Process telemetry data
 	groups := stubs.Group()
 	log.Printf("Grouped telemetry data into %d groups", len(groups))
+
+	fmt.Println("SessionID:", WeekendInfo.SessionID)
+	fmt.Println("WeekendInfo:", WeekendInfo)
+	fmt.Println("SubSessionID:", WeekendInfo.SubSessionID)
+	fmt.Println("TrackDisplayName:", WeekendInfo.TrackDisplayName)
+	fmt.Println("TrackID:", WeekendInfo.TrackID)
 
 	// Create wait group for parallel processing
 	var wg sync.WaitGroup
@@ -145,10 +150,8 @@ func main() {
 		processedGroups++
 	}
 
-	// Wait for all processing to complete
 	wg.Wait()
 
-	// Close all stubs
 	ibt.CloseAllStubs(groups)
 
 	totalTime := time.Since(startTime)
@@ -158,3 +161,9 @@ func main() {
 	// The application has completed its work and will now exit
 	log.Println("All data has been processed and uploaded to InfluxDB. Exiting application.")
 }
+
+// Total points processed: 176626
+// 2025-03-12 07:38:23 2025/03/12 07:38:23   Total batches sent: 69
+// 2025-03-12 07:38:23 2025/03/12 07:38:23   Maximum batch size: 3000
+// 2025-03-12 07:38:23 2025/03/12 07:38:23   Processing time: 282.97 seconds
+// 2025-03-12 07:38:23 2025/03/12 07:38:23   Points per second: 624.20
