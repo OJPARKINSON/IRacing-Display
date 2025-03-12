@@ -58,8 +58,8 @@ services:
       BATCH_TIMEOUT: "1s"
       MAX_RETRIES: "3"
       RETRY_DELAY: "500ms"
-      PARALLEL_GROUPS: "4"
-      BATCH_SIZE: "1000"
+      PARALLEL_GROUPS: "1"
+      BATCH_SIZE: "3000"
       # Golang performance tuning
       GOMAXPROCS: "0" # Let Go determine based on available CPUs
       GOGC: "100" # Default garbage collection threshold
@@ -75,7 +75,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: ".3"
+          cpus: "1.6"
           memory: 1G
 
 secrets:
