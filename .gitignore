@@ -29,3 +29,10 @@ ingest/go/ibt_files/*.ibt
 **/.env.influxdb-admin-password
 **/.env.influxdb-admin-token
 **/.env.influxdb-admin-username
+*.blk
+*.db
+*.influxdb
+*.sum
+*.inf
+**/bin
+*.ibt

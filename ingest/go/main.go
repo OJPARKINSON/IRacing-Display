@@ -161,9 +161,3 @@ func main() {
 	// The application has completed its work and will now exit
 	log.Println("All data has been processed and uploaded to InfluxDB. Exiting application.")
 }
-
-// Total points processed: 176626
-// 2025-03-12 07:38:23 2025/03/12 07:38:23   Total batches sent: 69
-// 2025-03-12 07:38:23 2025/03/12 07:38:23   Maximum batch size: 3000
-// 2025-03-12 07:38:23 2025/03/12 07:38:23   Processing time: 282.97 seconds
-// 2025-03-12 07:38:23 2025/03/12 07:38:23   Points per second: 624.20
