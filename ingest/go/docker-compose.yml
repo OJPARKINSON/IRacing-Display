@@ -36,7 +36,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: ".3"
+          cpus: ".6"
           memory: 1G
 
   go_app:
@@ -75,7 +75,41 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.6"
+          cpus: ".6"
+          memory: 1G
+  nats:
+    image: nats:latest
+    container_name: nats-jetstream
+    ports:
+      - "4222:4222" # Client connections
+      - "8222:8222" # HTTP monitoring
+      - "6222:6222" # Clustering
+    volumes:
+      - ./config/jetstream.conf:/etc/nats/jetstream.conf:ro
+      - ./data:/data
+    command: "-c /etc/nats/jetstream.conf --jetstream"
+    restart: unless-stopped
+    networks:
+      - telemetry-network
+      - default
+
+  nats-setup:
+    image: natsio/nats-box
+    depends_on:
+      - nats
+    restart: "no"
+    networks:
+      - telemetry-network
+    command: >
+      sh -c "
+        sleep 5 &&
+        nats stream add my_stream --server=nats:4222 --subjects='orders.*' --storage=file --retention=limits --max-age=24h --discard=old &&
+        nats consumer add my_stream my-consumer --server=nats:4222 --filter='orders.*' --deliver=all --replay=instant --ack=explicit
+      "
+    deploy:
+      resources:
+        limits:
+          cpus: ".6"
           memory: 1G
 
 secrets:

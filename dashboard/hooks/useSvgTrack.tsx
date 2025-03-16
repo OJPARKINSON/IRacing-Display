@@ -50,7 +50,7 @@ export function useSvgTrack() {
             let minDistance = Number.MAX_VALUE;
 
             // First pass with fewer samples to get approximate location
-            let step = pathLength / 100;
+            let step = pathLength / 10;
             for (let i = 0; i < pathLength; i += step) {
               const point = pathElement.getPointAtLength(i);
               const distance = Math.sqrt(
