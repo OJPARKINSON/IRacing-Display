@@ -2,55 +2,42 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"time"
 
-	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/segmentio/kafka-go"
+)
+
+var (
+	kafkaTopic = "large-files"
 )
 
 func main() {
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
-	failOnError(err, "Failed to connect to RabbitMQ")
-	defer conn.Close()
-	if err != nil {
-		fmt.Printf("Failed to connect to NATS: %v\n", err)
-		return
+	w := &kafka.Writer{
+		Addr:     kafka.TCP("localhost:9092", "localhost:9094", "localhost:9095"),
+		Topic:    kafkaTopic,
+		Balancer: &kafka.LeastBytes{},
 	}
 
-	ch, err := conn.Channel()
-	failOnError(err, "Failed to open a channel")
-	defer ch.Close()
-
-	q, err := ch.QueueDeclare(
-		"hello", // name
-		false,   // durable
-		false,   // delete when unused
-		false,   // exclusive
-		false,   // no-wait
-		nil,     // arguments
+	err := w.WriteMessages(context.Background(),
+		kafka.Message{
+			Key:   []byte("Key-A"),
+			Value: []byte("Hello World!"),
+		},
+		kafka.Message{
+			Key:   []byte("Key-B"),
+			Value: []byte("One!"),
+		},
+		kafka.Message{
+			Key:   []byte("Key-C"),
+			Value: []byte("Two!"),
+		},
 	)
-	failOnError(err, "Failed to declare a queue")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	body := "Hello World!"
-	err = ch.PublishWithContext(ctx,
-		"",     // exchange
-		q.Name, // routing key
-		false,  // mandatory
-		false,  // immediate
-		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        []byte(body),
-		})
-	failOnError(err, "Failed to publish a message")
-	log.Printf(" [x] Sent %s\n", body)
-}
-
-func failOnError(err error, msg string) {
 	if err != nil {
-		log.Panicf("%s: %s", msg, err)
+		log.Fatal("failed to write messages:", err)
 	}
+
+	if err := w.Close(); err != nil {
+		log.Fatal("failed to close writer:", err)
+	}
+
 }

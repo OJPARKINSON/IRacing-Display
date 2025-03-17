@@ -1,54 +1,36 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 
-	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/segmentio/kafka-go"
+)
+
+var (
+	kafkaTopic = "large-files"
 )
 
 func main() {
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
-	failOnError(err, "Failed to connect to RabbitMQ")
-	defer conn.Close()
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:   []string{"localhost:9092", "localhost:9094", "localhost:9095"},
+		Topic:     kafkaTopic,
+		Partition: 0,
+		MaxBytes:  209715200, // 600MB
+	})
+	r.SetOffset(0)
 
-	ch, err := conn.Channel()
-	failOnError(err, "Failed to open a channel")
-	defer ch.Close()
-
-	q, err := ch.QueueDeclare(
-		"hello", // name
-		false,   // durable
-		false,   // delete when unused
-		false,   // exclusive
-		false,   // no-wait
-		nil,     // arguments
-	)
-	failOnError(err, "Failed to declare a queue")
-
-	msgs, err := ch.Consume(
-		q.Name, // queue
-		"",     // consumer
-		true,   // auto-ack
-		false,  // exclusive
-		false,  // no-local
-		false,  // no-wait
-		nil,    // args
-	)
-	failOnError(err, "Failed to register a consumer")
-
-	var forever chan struct{}
-
-	go func() {
-		for d := range msgs {
-			log.Printf("Received a message: %s", d.Body)
+	for {
+		m, err := r.ReadMessage(context.Background())
+		if err != nil {
+			log.Fatal("failed to read:", err)
+			break
 		}
-	}()
+		fmt.Printf("message at offset %d: %s = %s\n", m.Offset, string(m.Key), string(m.Value))
+	}
 
-	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
-	<-forever
-}
-func failOnError(err error, msg string) {
-	if err != nil {
-		log.Panicf("%s: %s", msg, err)
+	if err := r.Close(); err != nil {
+		log.Fatal("failed to close reader:", err)
 	}
 }
