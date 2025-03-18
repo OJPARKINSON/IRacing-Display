@@ -1,11 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
+	"time"
 
-	"github.com/segmentio/kafka-go"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
 var (
@@ -13,24 +13,39 @@ var (
 )
 
 func main() {
-	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:   []string{"localhost:9092", "localhost:9094", "localhost:9095"},
-		Topic:     kafkaTopic,
-		Partition: 0,
-		MaxBytes:  209715200, // 600MB
+	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
+		"bootstrap.servers":         "localhost:9092,localhost:9094,localhost:9095",
+		"group.id":                  "file-processor-group",
+		"auto.offset.reset":         "earliest",
+		"fetch.message.max.bytes":   409715200, // 200MB
+		"max.partition.fetch.bytes": 409715200,
 	})
-	r.SetOffset(0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer consumer.Close()
+
+	consumer.SubscribeTopics([]string{kafkaTopic}, nil)
 
 	for {
-		m, err := r.ReadMessage(context.Background())
-		if err != nil {
-			log.Fatal("failed to read:", err)
-			break
-		}
-		fmt.Printf("message at offset %d: %s = %s\n", m.Offset, string(m.Key), string(m.Value))
-	}
+		msg, err := consumer.ReadMessage(time.Second * 10)
 
-	if err := r.Close(); err != nil {
-		log.Fatal("failed to close reader:", err)
+		if err == nil {
+			// Process your 200MB file
+			fmt.Printf("Message on %s: %s bytes\n", msg.TopicPartition, len(msg.Value))
+
+			// Commit the message
+			consumer.CommitMessage(msg)
+		} else {
+			// Check if the error is a kafka.Error and if it's a timeout
+			kafkaErr, ok := err.(kafka.Error)
+			if ok && kafkaErr.Code() == kafka.ErrTimedOut {
+				// Timeout is normal, just continue
+				continue
+			}
+
+			// Handle other errors
+			fmt.Printf("Consumer error: %v\n", err)
+		}
 	}
 }
