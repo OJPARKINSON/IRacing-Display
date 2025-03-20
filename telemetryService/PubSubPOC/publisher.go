@@ -35,72 +35,8 @@ func main() {
 
 	deliveryChan := make(chan kafka.Event)
 
-	chunkSize := 10 * 1024 * 1024
-
-	fileLen := len(fileData)
-
-	totalChunks := int(math.Ceil(float64(fileLen) / float64(chunkSize)))
-
-	for i := 0; i < totalChunks; i++ {
-		start := i * chunkSize
-		end := start + chunkSize
-		if end > fileLen {
-			end = fileLen
-		}
-
-		chunk := fileData[start:end]
-
-		chunkKey := fmt.Sprintf("%s.part%d-%d", fileName, i+1, totalChunks)
-
-		fmt.Printf("Sending chunk %d/%d: %d bytes\n", i+1, totalChunks, len(chunk))
-
-		chunkMetadata := map[string]string{
-			"filename":    fileName,
-			"chunkIndex":  fmt.Sprintf("%d", i),
-			"totalChunks": fmt.Sprintf("%d", totalChunks),
-			"fileSize":    fmt.Sprintf("%d", fileLen),
-			"chunkSize":   fmt.Sprintf("%d", len(chunk)),
-			"transferId":  fmt.Sprintf("%s-%d", fileName, time.Now().Unix()), // Unique transfer ID
-		}
-
-		// Convert metadata to Kafka headers
-		var headers []kafka.Header
-		for k, v := range chunkMetadata {
-			headers = append(headers, kafka.Header{
-				Key:   k,
-				Value: []byte(v),
-			})
-		}
-
-		err = producer.Produce(&kafka.Message{
-			TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
-			Key:            []byte(chunkKey),
-			Value:          chunk,
-			Headers:        headers,
-		}, deliveryChan)
-
-		if err != nil {
-			log.Fatalf("Failed to produce message: %s", err)
-		}
-
-		// Wait for message delivery
-		log.Println("Waiting for message delivery...")
-
-		// Handle the event correctly with proper type checking
-		e := <-deliveryChan
-		switch ev := e.(type) {
-		case *kafka.Message:
-			if ev.TopicPartition.Error != nil {
-				log.Printf("Failed to deliver message: %v\n", ev.TopicPartition.Error)
-			} else {
-				log.Printf("Successfully delivered message to topic %s [%d] at offset %v\n",
-					*ev.TopicPartition.Topic, ev.TopicPartition.Partition, ev.TopicPartition.Offset)
-			}
-		case kafka.Error:
-			log.Printf("Kafka error: %v\n", ev)
-		default:
-			log.Printf("Unexpected event type: %T\n", ev)
-		}
+	if err := sendFileInChunks(producer, deliveryChan, fileName, fileData, topic); err != nil {
+		log.Fatalf("Failed to send file: %s", err)
 	}
 
 	// Flush any remaining messages
@@ -135,4 +71,76 @@ func getFile(filePath string) (string, []byte) {
 	fmt.Printf("Bytes read: %d\n", bytesRead)
 
 	return fileName, fileData
+}
+
+func sendFileInChunks(producer *kafka.Producer, deliveryChan chan kafka.Event,
+	fileName string, fileData []byte, topic string) error {
+
+	// Define chunk size (10 MB)
+	chunkSize := 1 * 1024 * 1024
+
+	// Calculate total number of chunks
+	fileLen := len(fileData)
+	totalChunks := int(math.Ceil(float64(fileLen) / float64(chunkSize)))
+
+	log.Printf("Sending file %s (%d bytes) in %d chunks", fileName, fileLen, totalChunks)
+
+	// Generate a single transferId for the entire file
+	// Use a consistent format with a timestamp that doesn't change during the transfer
+	transferID := fmt.Sprintf("%s-%d", fileName, time.Now().Unix())
+	log.Printf("Transfer ID: %s", transferID)
+
+	// Process each chunk with the same transferId
+	for i := 0; i < totalChunks; i++ {
+		// Calculate chunk boundaries
+		start := i * chunkSize
+		end := start + chunkSize
+		if end > fileLen {
+			end = fileLen // Ensure we don't go beyond file size
+		}
+
+		// Extract the chunk
+		chunk := fileData[start:end]
+
+		// Create metadata headers
+		headers := []kafka.Header{
+			{Key: "filename", Value: []byte(fileName)},
+			{Key: "chunkIndex", Value: []byte(fmt.Sprintf("%d", i))},
+			{Key: "totalChunks", Value: []byte(fmt.Sprintf("%d", totalChunks))},
+			{Key: "fileSize", Value: []byte(fmt.Sprintf("%d", fileLen))},
+			{Key: "transferId", Value: []byte(transferID)},
+		}
+
+		log.Printf("Sending chunk %d/%d (%d bytes)", i+1, totalChunks, len(chunk))
+
+		// Send this chunk to Kafka
+		err := producer.Produce(&kafka.Message{
+			TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
+			Key:            []byte(fileName),
+			Value:          chunk,
+			Headers:        headers,
+		}, deliveryChan)
+
+		if err != nil {
+			return fmt.Errorf("failed to produce chunk %d: %w", i+1, err)
+		}
+
+		// Wait for delivery confirmation
+		e := <-deliveryChan
+		switch ev := e.(type) {
+		case *kafka.Message:
+			if ev.TopicPartition.Error != nil {
+				return fmt.Errorf("failed to deliver chunk %d: %w",
+					i+1, ev.TopicPartition.Error)
+			}
+			log.Printf("Successfully delivered chunk %d/%d", i+1, totalChunks)
+		case kafka.Error:
+			return fmt.Errorf("kafka error on chunk %d: %w", i+1, ev)
+		default:
+			return fmt.Errorf("unexpected event type on chunk %d: %T", i+1, ev)
+		}
+	}
+
+	log.Printf("All %d chunks sent successfully for transfer %s", totalChunks, transferID)
+	return nil
 }
