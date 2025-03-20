@@ -83,6 +83,10 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 10
+      ZOOKEEPER_SYNC_LIMIT: 5
+      ZOOKEEPER_MAX_CLIENT_CNXNS: 60
+      ZOOKEEPER_4LW_COMMANDS_WHITELIST: "srvr,mntr,ruok,stat"
     ports:
       - "2181:2181"
     volumes:
@@ -138,8 +142,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
-          cpus: "1"
+          memory: 3G
+          cpus: "1.5"
+
     healthcheck:
       test:
         ["CMD", "kafka-topics", "--bootstrap-server", "kafka-1:9093", "--list"]
@@ -184,8 +189,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
-          cpus: "1"
+          memory: 3G
+          cpus: "1.5"
 
   # Kafka Broker 3
   kafka-3:
@@ -223,10 +228,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
-          cpus: "1"
+          memory: 3G
+          cpus: "1.5"
 
-  # Topic creation and configuration
   kafka-setup:
     image: confluentinc/cp-kafka:latest
     container_name: kafka-setup
@@ -234,20 +238,46 @@ services:
       - kafka-1
       - kafka-2
       - kafka-3
-    command: >
-      bash -c "
-        echo Waiting for Kafka to be ready...;
-        cub kafka-ready -b kafka-1:9093 1 30;
-        kafka-topics --create --if-not-exists
-          --bootstrap-server kafka-1:9093
-          --partitions 8
-          --replication-factor 3
-          --config max.message.bytes=409715200
-          --config retention.ms=604800000
-          --config segment.bytes=1073741824
-          --topic large-files;
-        echo Topics created;
-      "
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      echo "Starting Kafka topic creation script..."
+
+      # Retry mechanism
+      MAX_RETRIES=30
+      RETRY_INTERVAL=10
+
+      for i in $(seq 1 $MAX_RETRIES); do
+        echo "Attempt $$i of $$MAX_RETRIES: Checking if Kafka is ready..."
+
+        if kafka-topics --list --bootstrap-server=kafka-1:9093 > /dev/null 2>&1; then
+          echo "Kafka is ready! Creating topic..."
+
+          kafka-topics --create --if-not-exists \
+            --bootstrap-server=kafka-1:9093 \
+            --partitions=8 \
+            --replication-factor=3 \
+            --config=max.message.bytes=400000000 \
+            --config=retention.ms=604800000 \
+            --config=segment.bytes=1073741824 \
+            --topic=large-files
+
+          if [ $? -eq 0 ]; then
+            echo "Topic 'large-files' created or already exists!"
+            exit 0
+          else
+            echo "Failed to create topic. Error code: $?"
+          fi
+
+          break
+        else
+          echo "Kafka not yet ready. Waiting $$RETRY_INTERVAL seconds..."
+          sleep $RETRY_INTERVAL
+        fi
+      done
+
+      echo "Maximum retries reached. Could not connect to Kafka!"
+      exit 1
+    restart: on-failure:3
     networks:
       - telemetry-network
 
