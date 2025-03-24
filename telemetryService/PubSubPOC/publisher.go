@@ -16,7 +16,6 @@ func main() {
 	fileName, fileData := getFile(file)
 	topic := "large-files"
 
-	// Configure the producer
 	producer, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers":            "localhost:9094,localhost:9095,localhost:9092",
 		"message.max.bytes":            209715200, // ~400MB
@@ -39,9 +38,8 @@ func main() {
 		log.Fatalf("Failed to send file: %s", err)
 	}
 
-	// Flush any remaining messages
 	log.Println("Flushing remaining messages...")
-	producer.Flush(1500) // Wait up to 15 seconds
+	producer.Flush(1500)
 }
 
 func getFile(filePath string) (string, []byte) {
@@ -85,18 +83,14 @@ func sendFileInChunks(producer *kafka.Producer, deliveryChan chan kafka.Event,
 
 	log.Printf("Sending file %s (%d bytes) in %d chunks", fileName, fileLen, totalChunks)
 
-	// Generate a single transferId for the entire file
-	// Use a consistent format with a timestamp that doesn't change during the transfer
 	transferID := fmt.Sprintf("%s-%d", fileName, time.Now().Unix())
 	log.Printf("Transfer ID: %s", transferID)
 
-	// Process each chunk with the same transferId
 	for i := 0; i < totalChunks; i++ {
-		// Calculate chunk boundaries
 		start := i * chunkSize
 		end := start + chunkSize
 		if end > fileLen {
-			end = fileLen // Ensure we don't go beyond file size
+			end = fileLen
 		}
 
 		// Extract the chunk
@@ -113,7 +107,6 @@ func sendFileInChunks(producer *kafka.Producer, deliveryChan chan kafka.Event,
 
 		log.Printf("Sending chunk %d/%d (%d bytes)", i+1, totalChunks, len(chunk))
 
-		// Send this chunk to Kafka
 		err := producer.Produce(&kafka.Message{
 			TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
 			Key:            []byte(fileName),
@@ -125,7 +118,6 @@ func sendFileInChunks(producer *kafka.Producer, deliveryChan chan kafka.Event,
 			return fmt.Errorf("failed to produce chunk %d: %w", i+1, err)
 		}
 
-		// Wait for delivery confirmation
 		e := <-deliveryChan
 		switch ev := e.(type) {
 		case *kafka.Message:
