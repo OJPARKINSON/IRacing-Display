@@ -13,10 +13,6 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
-var (
-	kafkaTopic = "large-files"
-)
-
 type FileReassembly struct {
 	Filename       string
 	TotalChunks    int
@@ -40,11 +36,12 @@ func main() {
 		"security.protocol":         "PLAINTEXT",
 	})
 	if err != nil {
-		log.Fatal(err)
+		fmt.Printf("Failed to create consumer: %s", err)
+		os.Exit(1)
 	}
 	defer consumer.Close()
 
-	consumer.SubscribeTopics([]string{kafkaTopic}, nil)
+	consumer.SubscribeTopics([]string{"test-topic", "large-files"}, nil)
 
 	go cleanupStaleTransfers()
 
@@ -52,7 +49,11 @@ func main() {
 		msg, err := consumer.ReadMessage(time.Second * 10)
 
 		if err == nil {
-			processFileChunk(msg)
+			if *msg.TopicPartition.Topic == "large-files" {
+				processFileChunk(msg)
+			} else {
+				processTestEvent(msg)
+			}
 			consumer.CommitMessage(msg)
 		} else {
 			// Check if the error is a kafka.Error and if it's a timeout
@@ -83,7 +84,6 @@ func processFileChunk(msg *kafka.Message) {
 			chunkIndex, err = strconv.Atoi(string(header.Value))
 			if err != nil {
 				log.Printf("Invalid chunkIndex: %v", err)
-				parseError = true
 			}
 		case "totalChunks":
 			var err error
@@ -106,6 +106,9 @@ func processFileChunk(msg *kafka.Message) {
 
 	if filename == "" || transferID == "" || parseError {
 		log.Println("Received chunk with missing or invalid metadata, skipping")
+		if !parseError {
+			log.Println(parseError)
+		}
 		return
 	}
 
@@ -227,4 +230,11 @@ func cleanupStaleTransfers() {
 
 		reassemblyMutex.Unlock()
 	}
+}
+
+func processTestEvent(msg *kafka.Message) {
+	fmt.Println(msg.Key)
+	fmt.Println(msg.TopicPartition)
+	fmt.Println("value", msg.Value)
+	fmt.Println(msg.Headers)
 }
