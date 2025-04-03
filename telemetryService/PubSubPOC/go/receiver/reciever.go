@@ -28,7 +28,7 @@ var reassemblyMutex sync.Mutex
 
 func main() {
 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers":         "localhost:9094,localhost:9095,localhost:9092",
+		"bootstrap.servers":         "localhost:9094,localhost:9092",
 		"group.id":                  "file-processor-group",
 		"auto.offset.reset":         "earliest",
 		"fetch.message.max.bytes":   409715200,

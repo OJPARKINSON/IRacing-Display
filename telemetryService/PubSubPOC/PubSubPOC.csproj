@@ -11,5 +11,9 @@
     <PackageReference Include="Confluent.Kafka" Version="2.8.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="received_files\" />
+  </ItemGroup>
+
 
 </Project>

@@ -20,7 +20,7 @@ namespace PubSubPOC.Core.Producer
         {
             _config = new ProducerConfig
             {
-                BootstrapServers = "localhost:9092,localhost:9094,localhost:9095",
+                BootstrapServers = "localhost:9092,localhost:9094",
                 BrokerAddressFamily = BrokerAddressFamily.V4,
                 QueueBufferingMaxMessages = 10,
                 SecurityProtocol = SecurityProtocol.Plaintext,
@@ -31,7 +31,7 @@ namespace PubSubPOC.Core.Producer
                 SocketReceiveBufferBytes = 90000000
             };
             _privateKeyPath = Path.Combine(Environment.CurrentDirectory, "keys", "producer_private.key");
-            
+
             if (!File.Exists(_privateKeyPath))
             {
                 Console.WriteLine($"WARNING: Private key not found at {_privateKeyPath}");
@@ -49,12 +49,12 @@ namespace PubSubPOC.Core.Producer
             Console.WriteLine($"File Bytes: {fileBytes.Length} bytes");
 
             byte[] fileHash;
-            
+
             using (var sha256 = SHA256.Create())
             {
                 fileHash = sha256.ComputeHash(fileBytes);
             }
-            
+
             string fileHashBase64 = Convert.ToBase64String(fileHash);
 
             byte[] signature = null;

@@ -25,7 +25,7 @@ namespace PubSubPOC.Core.Consumer
         {
             _config = new ConsumerConfig
             {
-                BootstrapServers = "localhost:9092,localhost:9094,localhost:9095",
+                BootstrapServers = "localhost:9092,localhost:9094",
                 GroupId = "file-processor-group",
                 AutoOffsetReset = AutoOffsetReset.Earliest,
                 EnableAutoCommit = false,
@@ -61,7 +61,7 @@ namespace PubSubPOC.Core.Consumer
                         try
                         {
                             ConsumeResult<string, byte[]> consumeResult = consumer.Consume(TimeSpan.FromSeconds(10));
-                            
+
                             if (consumeResult == null)
                                 continue;
 
@@ -161,7 +161,7 @@ namespace PubSubPOC.Core.Consumer
                     Console.WriteLine("Received chunk with missing or invalid metadata, skipping");
                     return;
                 }
-                
+
                 if (chunkIndex < 0 || chunkIndex >= totalChunks)
                 {
                     Console.WriteLine($"Invalid chunk index {chunkIndex} (total chunks: {totalChunks}), skipping");
@@ -203,28 +203,28 @@ namespace PubSubPOC.Core.Consumer
                 }
 
                 bool isComplete = false;
-                
+
                 lock (reassembly.Lock)
                 {
                     if (reassembly.ReceivedChunks.ContainsKey(chunkIndex))
                     {
                         Console.WriteLine($"Duplicate chunk received for index {chunkIndex}, overwriting");
                     }
-                    
+
                     reassembly.ReceivedChunks[chunkIndex] = consumeResult.Message.Value;
                     reassembly.LastUpdated = DateTime.UtcNow;
 
                     Console.WriteLine($"Processed chunk {chunkIndex + 1}/{totalChunks} for file {filename} (Transfer ID: {transferId}, Received: {reassembly.ReceivedChunks.Count}/{totalChunks})");
 
                     isComplete = reassembly.ReceivedChunks.Count == reassembly.TotalChunks;
-                    
+
                     if (!isComplete)
                     {
                         int progress = (int)Math.Ceiling((reassembly.ReceivedChunks.Count / (double)reassembly.TotalChunks) * 100);
                         ConsoleUtility.WriteProgressBar(progress, reassembly.ReceivedChunks.Count > 1);
                     }
                 }
-                
+
                 if (isComplete)
                 {
                     Console.WriteLine($"All chunks received for file {filename}, reassembling...");
@@ -256,7 +256,7 @@ namespace PubSubPOC.Core.Consumer
                         }
                         await completeFileStream.WriteAsync(chunkData, 0, chunkData.Length);
                     }
-                    
+
                     if (completeFileStream.Length != reassembly.TotalFileSize)
                     {
                         Console.WriteLine($"Reassembled file size mismatch: expected {reassembly.TotalFileSize}, got {completeFileStream.Length}");
@@ -273,7 +273,7 @@ namespace PubSubPOC.Core.Consumer
                             actualHashBytes = sha256.ComputeHash(fileData);
                         }
                         string actualHash = Convert.ToBase64String(actualHashBytes);
-                        
+
                         if (actualHash != reassembly.FileHash)
                         {
                             Console.WriteLine($"File hash verification failed!");
@@ -281,10 +281,10 @@ namespace PubSubPOC.Core.Consumer
                             Console.WriteLine($"Actual: {actualHash}");
                             return;
                         }
-                        
+
                         Console.WriteLine("SHA-256 hash verification successful");
-                        
-                        if (_enableVerification && reassembly.Signature != null && 
+
+                        if (_enableVerification && reassembly.Signature != null &&
                             "ED25519-SHA256".Equals(reassembly.SignatureAlgorithm, StringComparison.OrdinalIgnoreCase))
                         {
                             try
@@ -292,15 +292,15 @@ namespace PubSubPOC.Core.Consumer
                                 byte[] fileHashBytes = Convert.FromBase64String(reassembly.FileHash);
 
                                 bool isSignatureValid;
-                                
+
                                 using (var ecdsa = ECDsa.Create())
                                 {
                                     byte[] publicKeyBytes = File.ReadAllBytes(_publicKeyPath);
                                     ecdsa.ImportSubjectPublicKeyInfo(publicKeyBytes, out _);
-                
-                                    isSignatureValid =  ecdsa.VerifyData(fileHashBytes, reassembly.Signature, HashAlgorithmName.SHA256);
+
+                                    isSignatureValid = ecdsa.VerifyData(fileHashBytes, reassembly.Signature, HashAlgorithmName.SHA256);
                                 }
-                                
+
                                 if (!isSignatureValid)
                                 {
                                     Console.WriteLine("Digital signature verification failed! The file may have been tampered with or came from an unauthorized source.");
@@ -317,7 +317,7 @@ namespace PubSubPOC.Core.Consumer
                             }
                         }
                     }
-                    
+
                     string outputDir = Path.Combine(Environment.CurrentDirectory, "received_files");
                     Directory.CreateDirectory(outputDir);
 
@@ -381,7 +381,7 @@ namespace PubSubPOC.Core.Consumer
             Console.WriteLine($"Key: {consumeResult.Message.Key}");
             Console.WriteLine($"Topic Partition: {consumeResult.TopicPartition}");
             Console.WriteLine($"Value: {Encoding.UTF8.GetString(consumeResult.Message.Value)}");
-            
+
             Console.WriteLine("Headers:");
             foreach (var header in consumeResult.Message.Headers)
             {

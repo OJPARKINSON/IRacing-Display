@@ -17,7 +17,7 @@ func main() {
 	topic := "large-files"
 
 	producer, err := kafka.NewProducer(&kafka.ConfigMap{
-		"bootstrap.servers":            "localhost:9094,localhost:9095,localhost:9092",
+		"bootstrap.servers":            "localhost:9094,localhost:9092",
 		"message.max.bytes":            209715200, // ~400MB
 		"delivery.timeout.ms":          600000,    // 5 minutes
 		"socket.send.buffer.bytes":     100000000,

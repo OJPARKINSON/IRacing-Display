@@ -77,167 +77,102 @@ services:
         limits:
           cpus: ".6"
           memory: 1G
-  zookeeper:
-    image: confluentinc/cp-zookeeper:latest
-    container_name: zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_INIT_LIMIT: 10
-      ZOOKEEPER_SYNC_LIMIT: 5
-      ZOOKEEPER_MAX_CLIENT_CNXNS: 60
-      ZOOKEEPER_4LW_COMMANDS_WHITELIST: "srvr,mntr,ruok,stat"
-    ports:
-      - "2181:2181"
-    volumes:
-      - zookeeper-data:/var/lib/zookeeper/data
-      - zookeeper-logs:/var/lib/zookeeper/log
-    networks:
-      - telemetry-network
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-    healthcheck:
-      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 | grep imok"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
-  # Kafka Broker 1
+  # Kafka broker with KRaft mode enabled (combined role)
   kafka-1:
     image: confluentinc/cp-kafka:latest
     container_name: kafka-1
-    depends_on:
-      - zookeeper
+    hostname: kafka-1
     ports:
       - "9092:9092"
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_NODE_ID: 1
+      KAFKA_KRAFT_MODE: "true"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9094
+      KAFKA_LISTENERS: PLAINTEXT://kafka-1:9093,EXTERNAL://0.0.0.0:9092,CONTROLLER://kafka-1:9094
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:9093,EXTERNAL://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       # Large message settings
       KAFKA_MESSAGE_MAX_BYTES: 409715200 # 200MB
       KAFKA_REPLICA_FETCH_MAX_BYTES: 409715200 # 200MB
       KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 209715200
       KAFKA_SOCKET_REQUEST_MAX_BYTES: 209715200
       KAFKA_FETCH_MAX_BYTES: 209715200
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_COMPRESSION_TYPE: lz4
       # Performance settings
       KAFKA_NUM_PARTITIONS: 8
-      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
-      KAFKA_LOG_RETENTION_HOURS: 168 # 1 week
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 72
       KAFKA_LOG_SEGMENT_BYTES: 1073741824 # 1GB
       KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000 # 5 minutes
-      # JVM settings
-      KAFKA_HEAP_OPTS: "-Xmx1G -Xms1G"
+      # KRaft settings
+      KAFKA_METADATA_LOG_DIR: /var/lib/kafka/kraft-metadata
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      CLUSTER_ID: "EWLmw6qURnOrFSdphNRUbw"
     volumes:
       - kafka-1-data:/var/lib/kafka/data
+      - ./data:/var/lib/kafka/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - kafka-1-metadata:/var/lib/kafka/kraft-metadata
+    command:
+      - sh
+      - -c
+      - |
+        echo "Creating Kafka config properties file..."
+        cat > /tmp/server.properties << EOF
+        node.id=1
+        process.roles=broker,controller
+        controller.quorum.voters=1@kafka-1:9094
+        listeners=PLAINTEXT://kafka-1:9093,EXTERNAL://0.0.0.0:9092,CONTROLLER://kafka-1:9094
+        advertised.listeners=PLAINTEXT://kafka-1:9093,EXTERNAL://localhost:9092
+        listener.security.protocol.map=PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+        inter.broker.listener.name=PLAINTEXT
+        controller.listener.names=CONTROLLER
+        EOF
+
+        # Ensure proper permissions on directories
+        mkdir -p /var/lib/kafka/data /var/lib/kafka/kraft-metadata
+        chown -R appuser:appuser /var/lib/kafka/data /var/lib/kafka/kraft-metadata
+        chmod -R 775 /var/lib/kafka/data /var/lib/kafka/kraft-metadata
+
+        if [ ! -f /var/lib/kafka/kraft-metadata/meta.properties ]; then
+          echo "Formatting storage for Kafka..."
+          kafka-storage format -t ${CLUSTER_ID} -c /tmp/server.properties
+        fi
+
+        exec /etc/confluent/docker/run
     networks:
       - telemetry-network
     deploy:
       resources:
         limits:
-          memory: 3G
-          cpus: "1.5"
-
+          memory: 1G
+          cpus: "1"
     healthcheck:
       test:
-        ["CMD", "kafka-topics", "--bootstrap-server", "kafka-1:9093", "--list"]
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "kafka-topics --bootstrap-server=kafka-1:9093 --list || exit 1",
+        ]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 90s
 
-  # Kafka Broker 2
-  kafka-2:
-    image: confluentinc/cp-kafka:latest
-    container_name: kafka-2
-    depends_on:
-      - zookeeper
-    ports:
-      - "9094:9094"
-    environment:
-      KAFKA_BROKER_ID: 2
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9093,EXTERNAL://localhost:9094
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      # Large message settings
-      KAFKA_MESSAGE_MAX_BYTES: 409715200 # 200MB
-      KAFKA_REPLICA_FETCH_MAX_BYTES: 409715200 # 200MB
-      KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 209715200
-      KAFKA_SOCKET_REQUEST_MAX_BYTES: 209715200
-      KAFKA_FETCH_MAX_BYTES: 209715200
-      KAFKA_COMPRESSION_TYPE: lz4
-      # Performance settings
-      KAFKA_NUM_PARTITIONS: 8
-      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
-      KAFKA_LOG_RETENTION_HOURS: 168 # 1 week
-      KAFKA_LOG_SEGMENT_BYTES: 1073741824 # 1GB
-      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000 # 5 minutes
-      # JVM settings
-      KAFKA_HEAP_OPTS: "-Xmx1G -Xms1G"
-    volumes:
-      - kafka-2-data:/var/lib/kafka/data
-    networks:
-      - telemetry-network
-    deploy:
-      resources:
-        limits:
-          memory: 3G
-          cpus: "1.5"
-
-  # Kafka Broker 3
-  kafka-3:
-    image: confluentinc/cp-kafka:latest
-    container_name: kafka-3
-    depends_on:
-      - zookeeper
-    ports:
-      - "9095:9095"
-    environment:
-      KAFKA_BROKER_ID: 3
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:9093,EXTERNAL://localhost:9095
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      # Large message settings
-      KAFKA_MESSAGE_MAX_BYTES: 409715200 # 200MB
-      KAFKA_REPLICA_FETCH_MAX_BYTES: 409715200 # 200MB
-      KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 209715200
-      KAFKA_SOCKET_REQUEST_MAX_BYTES: 209715200
-      KAFKA_FETCH_MAX_BYTES: 209715200
-      KAFKA_COMPRESSION_TYPE: lz4
-      # Performance settings
-      KAFKA_NUM_PARTITIONS: 8
-      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
-      KAFKA_LOG_RETENTION_HOURS: 168 # 1 week
-      KAFKA_LOG_SEGMENT_BYTES: 1073741824 # 1GB
-      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000 # 5 minutes
-      # JVM settings
-      KAFKA_HEAP_OPTS: "-Xmx1G -Xms1G"
-    volumes:
-      - kafka-3-data:/var/lib/kafka/data
-    networks:
-      - telemetry-network
-    deploy:
-      resources:
-        limits:
-          memory: 3G
-          cpus: "1.5"
-
+  # Kafka Setup for topic creation
   kafka-setup:
     image: confluentinc/cp-kafka:latest
     container_name: kafka-setup
     depends_on:
-      - kafka-1
-      - kafka-2
-      - kafka-3
+      kafka-1:
+        condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
     command: |
       echo "Starting Kafka topic creation script..."
@@ -254,8 +189,8 @@ services:
 
           kafka-topics --create --if-not-exists \
             --bootstrap-server=kafka-1:9093 \
-            --partitions=8 \
-            --replication-factor=3 \
+            --partitions=3 \
+            --replication-factor=1 \
             --config=max.message.bytes=400000000 \
             --config=retention.ms=604800000 \
             --config=segment.bytes=1073741824 \
@@ -286,14 +221,13 @@ services:
     image: confluentinc/cp-schema-registry:latest
     container_name: schema-registry
     depends_on:
-      - kafka-1
-      - kafka-2
-      - kafka-3
+      kafka-1:
+        condition: service_healthy
     ports:
       - "8081:8081"
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "kafka-1:9093,kafka-2:9093,kafka-3:9093"
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "kafka-1:9093"
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
     volumes:
       - schema-registry-data:/var/lib/schema-registry
@@ -310,23 +244,23 @@ services:
     image: confluentinc/cp-kafka-connect:latest
     container_name: kafka-connect
     depends_on:
-      - kafka-1
-      - kafka-2
-      - kafka-3
-      - schema-registry
+      kafka-1:
+        condition: service_healthy
+      schema-registry:
+        condition: service_started
     ports:
       - "8083:8083"
     environment:
-      CONNECT_BOOTSTRAP_SERVERS: "kafka-1:9093,kafka-2:9093,kafka-3:9093"
+      CONNECT_BOOTSTRAP_SERVERS: "kafka-1:9093"
       CONNECT_REST_PORT: 8083
       CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
       CONNECT_GROUP_ID: "connect-cluster"
       CONNECT_CONFIG_STORAGE_TOPIC: "connect-configs"
       CONNECT_OFFSET_STORAGE_TOPIC: "connect-offsets"
       CONNECT_STATUS_STORAGE_TOPIC: "connect-status"
-      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 3
-      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 3
-      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.storage.StringConverter"
       CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.converters.ByteArrayConverter"
       CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
@@ -348,17 +282,17 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     depends_on:
-      - kafka-1
-      - kafka-2
-      - kafka-3
-      - schema-registry
-      - kafka-connect
+      kafka-1:
+        condition: service_healthy
+      schema-registry:
+        condition: service_started
+      kafka-connect:
+        condition: service_started
     ports:
       - "8080:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: local-cluster
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:9093,kafka-2:9093,kafka-3:9093
-      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:9093
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: kafka-connect
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect:8083
@@ -381,11 +315,19 @@ secrets:
 volumes:
   influxdb2-data:
   influxdb2-config:
-  zookeeper-data:
-  zookeeper-logs:
+  # Kafka volumes created with appropriate permissions
   kafka-1-data:
-  kafka-2-data:
-  kafka-3-data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/kafka-data
+      o: bind
+  kafka-1-metadata:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/kafka-metadata
+      o: bind
   schema-registry-data:
 
 networks:
