@@ -183,3 +183,6 @@ artifacts/
 *.sln.ide
 keys/
 *.key
+
+ingest/go/kafka-metadata/*
+ingest/go/kafka-data/*
