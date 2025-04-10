@@ -44,9 +44,8 @@ func main() {
 	}
 	defer consumer.Close()
 
-	consumer.SubscribeTopics([]string{"large-files"}, nil)
+	consumer.SubscribeTopics([]string{kafkaTopic}, nil)
 
-	// Start a goroutine to clean up stale transfers
 	go cleanupStaleTransfers()
 
 	for {
@@ -73,24 +72,47 @@ func processFileChunk(msg *kafka.Message) {
 	// Extract metadata from headers
 	var filename, transferID string
 	var chunkIndex, totalChunks, fileSize int
+	var parseError bool
 
 	for _, header := range msg.Headers {
 		switch header.Key {
 		case "filename":
 			filename = string(header.Value)
 		case "chunkIndex":
-			chunkIndex, _ = strconv.Atoi(string(header.Value))
+			var err error
+			chunkIndex, err = strconv.Atoi(string(header.Value))
+			if err != nil {
+				log.Printf("Invalid chunkIndex: %v", err)
+				parseError = true
+			}
 		case "totalChunks":
-			totalChunks, _ = strconv.Atoi(string(header.Value))
+			var err error
+			totalChunks, err = strconv.Atoi(string(header.Value))
+			if err != nil {
+				log.Printf("Invalid totalChunks: %v", err)
+				parseError = true
+			}
 		case "fileSize":
-			fileSize, _ = strconv.Atoi(string(header.Value))
+			var err error
+			fileSize, err = strconv.Atoi(string(header.Value))
+			if err != nil {
+				log.Printf("Invalid fileSize: %v", err)
+				parseError = true
+			}
 		case "transferId":
 			transferID = string(header.Value)
 		}
 	}
 
-	if filename == "" || transferID == "" {
-		log.Println("Received chunk with missing metadata, skipping")
+	if filename == "" || transferID == "" || parseError {
+		log.Println("Received chunk with missing or invalid metadata, skipping")
+		return
+	}
+
+	// Validate the chunk metadata
+	if chunkIndex < 0 || chunkIndex >= totalChunks {
+		log.Printf("Invalid chunk index %d (total chunks: %d), skipping",
+			chunkIndex, totalChunks)
 		return
 	}
 
@@ -107,27 +129,44 @@ func processFileChunk(msg *kafka.Message) {
 			LastUpdated:    time.Now(),
 		}
 		fileReassemblies[transferID] = reassembly
+	} else {
+		// Verify that metadata is consistent across chunks
+		if reassembly.TotalChunks != totalChunks {
+			log.Printf("Warning: Chunk has inconsistent totalChunks value: got %d, expected %d",
+				totalChunks, reassembly.TotalChunks)
+		}
 	}
 	reassemblyMutex.Unlock()
 
 	// Add this chunk to the reassembly
 	reassembly.mu.Lock()
+	defer reassembly.mu.Unlock()
+
+	// Check if we've already received this chunk
+	if _, exists := reassembly.ReceivedChunks[chunkIndex]; exists {
+		log.Printf("Duplicate chunk received for index %d, overwriting", chunkIndex)
+	}
+
+	// Store the chunk
 	reassembly.ReceivedChunks[chunkIndex] = msg.Value
 	reassembly.LastUpdated = time.Now()
 
+	log.Printf("Processed chunk %d/%d for file %s (Transfer ID: %s, Received: %d/%d)\n",
+		chunkIndex+1, totalChunks, filename, transferID,
+		len(reassembly.ReceivedChunks), totalChunks)
+
 	// Check if we have all chunks
 	if len(reassembly.ReceivedChunks) == reassembly.TotalChunks {
+		log.Printf("All chunks received for file %s, reassembling...", filename)
 		// Reassemble the file
 		reassembleAndSaveFile(reassembly)
 		// Remove from tracking
 		reassemblyMutex.Lock()
 		delete(fileReassemblies, transferID)
 		reassemblyMutex.Unlock()
+	} else {
+		log.Println(len(reassembly.ReceivedChunks), reassembly.TotalChunks, reassembly.TotalFileSize)
 	}
-	reassembly.mu.Unlock()
-
-	log.Printf("Processed chunk %d/%d for file %s (Transfer ID: %s)\n",
-		chunkIndex+1, totalChunks, filename, transferID)
 }
 
 // Reassemble and save the complete file
