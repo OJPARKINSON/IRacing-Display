@@ -184,5 +184,5 @@ artifacts/
 keys/
 *.key
 
-ingest/go/kafka-metadata/*
+telemetryService/kafka/*
 ingest/go/kafka-data/*

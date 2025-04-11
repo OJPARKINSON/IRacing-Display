@@ -11,7 +11,7 @@ import (
 )
 
 type loaderProcessor struct {
-	storage     *storage
+	pubSub      *PubSub
 	cache       []map[string]interface{}
 	groupNumber int
 	threshold   int
@@ -31,9 +31,9 @@ type processorMetrics struct {
 }
 
 // newLoaderProcessor creates a new processor with the specified parameters
-func newLoaderProcessor(storage *storage, groupNumber int, threshold int) *loaderProcessor {
+func newLoaderProcessor(pubSub *PubSub, groupNumber int, threshold int) *loaderProcessor {
 	lp := &loaderProcessor{
-		storage:     storage,
+		pubSub:      pubSub,
 		cache:       make([]map[string]interface{}, 0, threshold),
 		groupNumber: groupNumber,
 		threshold:   threshold,
@@ -143,7 +143,7 @@ func (l *loaderProcessor) loadBatch() error {
 	l.metrics.mu.Unlock()
 
 	// Send the batch to storage
-	return l.storage.Exec(batch)
+	return l.pubSub.Exec(batch)
 }
 
 // Close performs any necessary cleanup for the processor
@@ -164,9 +164,6 @@ func (l *loaderProcessor) Close() error {
 		}
 	}
 
-	// Explicitly flush storage
-	l.storage.Flush()
-
 	// Log processing metrics
 	l.logMetrics()
 
@@ -178,13 +175,13 @@ func (l *loaderProcessor) logMetrics() {
 	l.metrics.mu.Lock()
 	defer l.metrics.mu.Unlock()
 
-	totalTime := time.Since(l.metrics.processingStarted)
-	pointsPerSecond := float64(l.metrics.totalProcessed) / totalTime.Seconds()
+	totalTime := time.Since(l.metrics.processingStarted).Milliseconds()
+	pointsPerSecond := int64(l.metrics.totalProcessed) / totalTime
 
 	log.Printf("Processing metrics for group %d:", l.groupNumber)
 	log.Printf("  Total points processed: %d", l.metrics.totalProcessed)
 	log.Printf("  Total batches sent: %d", l.metrics.totalBatches)
 	log.Printf("  Maximum batch size: %d", l.metrics.maxBatchSize)
-	log.Printf("  Processing time: %.2f seconds", totalTime.Seconds())
-	log.Printf("  Points per second: %.2f", pointsPerSecond)
+	log.Printf("  Processing time: %d milliseconds", totalTime)
+	log.Printf("  Points per second: %d", pointsPerSecond)
 }
