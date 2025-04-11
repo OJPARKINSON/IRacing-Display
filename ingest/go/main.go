@@ -17,7 +17,8 @@ import (
 )
 
 func main() {
-	// Setup clean shutdown handling
+	startTime := time.Now()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -37,8 +38,6 @@ func main() {
 
 	ibtFilePath := os.Args[1]
 	log.Println("Processing IBT file:", ibtFilePath)
-
-	startTime := time.Now()
 
 	// Find matching files
 	files, err := filepath.Glob(ibtFilePath)
@@ -66,13 +65,10 @@ func main() {
 	headers := stubs[0].Headers()
 	WeekendInfo := headers.SessionInfo.WeekendInfo
 
-	storage := newStorage(strconv.Itoa(WeekendInfo.SubSessionID))
-	if err := storage.Connect(); err != nil {
-		log.Fatal(err)
-	}
+	pubSub := newPubSub(strconv.Itoa(WeekendInfo.SubSessionID))
 	defer func() {
-		log.Println("Closing storage connection...")
-		if err := storage.Close(); err != nil {
+		log.Println("Closing RabbitMQ connection...")
+		if err := pubSub.Close(); err != nil {
 			log.Printf("Error closing storage: %v", err)
 		}
 	}()
@@ -94,7 +90,7 @@ func main() {
 	parallelism := runtime.NumCPU()
 	if pEnv := os.Getenv("PARALLEL_GROUPS"); pEnv != "" {
 		if p, err := fmt.Sscanf(pEnv, "%d", &parallelism); err != nil || p < 1 {
-			parallelism = 1
+			parallelism = 4
 		}
 	}
 	log.Printf("Using parallelism of %d", parallelism)
@@ -108,14 +104,14 @@ func main() {
 	for groupNumber, group := range groups {
 		// Create processor with optimal batch size
 		// Batch size is adjustable via environment variable
-		batchSize := 1000
+		batchSize := 9000000
 		if bsEnv := os.Getenv("BATCH_SIZE"); bsEnv != "" {
 			if bs, err := fmt.Sscanf(bsEnv, "%d", &batchSize); err != nil || bs < 1 {
-				batchSize = 1000
+				batchSize = 9000000
 			}
 		}
 
-		processor := newLoaderProcessor(storage, groupNumber, batchSize)
+		processor := newLoaderProcessor(pubSub, groupNumber, batchSize)
 		processors = append(processors, processor)
 
 		wg.Add(1)
@@ -156,7 +152,7 @@ func main() {
 
 	totalTime := time.Since(startTime)
 	log.Printf("Processing complete. Processed %d groups in %v", processedGroups, totalTime)
-	log.Printf("Total batches loaded: %d", storage.Loaded())
+	log.Printf("Total batches loaded: %d", pubSub.Loaded())
 
 	// The application has completed its work and will now exit
 	log.Println("All data has been processed and uploaded to InfluxDB. Exiting application.")

@@ -1,16 +1,62 @@
-version: "3.9"
-
 services:
-  server:
-    container_name: telemetry-ingest
-    image: golang:1.23
-    # restart: unless-stopped
+  influxdb:
+    image: influxdb:2
+    container_name: influxdb
+    restart: always
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME_FILE: /run/secrets/influxdb-admin-username
+      DOCKER_INFLUXDB_INIT_PASSWORD_FILE: /run/secrets/influxdb-admin-password
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE: /run/secrets/influxdb-admin-token
+      DOCKER_INFLUXDB_INIT_ORG: myorg
+      DOCKER_INFLUXDB_INIT_BUCKET: telemetry
+    secrets:
+      - influxdb-admin-username
+      - influxdb-admin-password
+      - influxdb-admin-token
     volumes:
-      - .:/app
-      - $GOPATH/pkg/mod:/go/pkg/mod
-    working_dir: /app
-    command: go run subscriber.go
-    depends_on:
-      - mongodb
-    links:
-      - "mongodb:db"
+      - influxdb2-data:/var/lib/influxdb2
+      - influxdb2-config:/etc/influxdb2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    networks:
+      - telemetry-network
+
+  rabbitMQ:
+    container_name: rabbitMQ
+    image: rabbitmq:4.0-management
+    ports: 
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - telemetry-network
+
+secrets:
+  influxdb-admin-username:
+    file: .env.influxdb-admin-username
+  influxdb-admin-password:
+    file: .env.influxdb-admin-password
+  influxdb-admin-token:
+    file: .env.influxdb-admin-token
+
+volumes:
+  influxdb2-data:
+  influxdb2-config:
+  rabbitmq-data:
+
+networks:
+  telemetry-network:
+    external: true

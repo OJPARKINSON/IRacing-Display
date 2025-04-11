@@ -1,39 +1,6 @@
 version: "3.8"
 
 services:
-  influxdb:
-    image: influxdb:2
-    container_name: influxdb
-    restart: always
-    ports:
-      - "8086:8086"
-    environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME_FILE: /run/secrets/influxdb-admin-username
-      DOCKER_INFLUXDB_INIT_PASSWORD_FILE: /run/secrets/influxdb-admin-password
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE: /run/secrets/influxdb-admin-token
-      DOCKER_INFLUXDB_INIT_ORG: myorg
-      DOCKER_INFLUXDB_INIT_BUCKET: telemetry
-    secrets:
-      - influxdb-admin-username
-      - influxdb-admin-password
-      - influxdb-admin-token
-    volumes:
-      - influxdb2-data:/var/lib/influxdb2
-      - influxdb2-config:/etc/influxdb2
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-    networks:
-      - telemetry-network
-
   go_app:
     build: .
     container_name: go-telemetry
@@ -44,10 +11,7 @@ services:
     networks:
       - telemetry-network
     environment:
-      INFLUXDB_URL: http://influxdb:8086
-      INFLUXDB_ORG: myorg
-      INFLUXDB_BUCKET: telemetry
-      INFLUXDB_TOKEN_FILE: /run/secrets/influxdb-admin-token
+      KAFKA_URL: "localhost:9092,localhost:9095"
       MAX_BATCH_SIZE: "5000"
       BATCH_TIMEOUT: "1s"
       MAX_RETRIES: "3"
@@ -56,8 +20,6 @@ services:
       BATCH_SIZE: "3000"
       GOMAXPROCS: "0"
       GOGC: "100"
-    secrets:
-      - influxdb-admin-token
     volumes:
       - ./ibt_files:/app/ibt_files
     entrypoint:
@@ -65,76 +27,6 @@ services:
         "/app/telemetry-app",
         "/app/ibt_files/mclaren720sgt3_monza full 2025-02-09 12-58-11.ibt",
       ]
-
-  kafka-1:
-    image: confluentinc/cp-kafka:latest
-    container_name: kafka-1
-    hostname: kafka-1
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_KRAFT_MODE: "true"
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka-1:9094"
-      KAFKA_LISTENERS: PLAINTEXT://kafka-1:9093,CONTROLLER://kafka-1:9094
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:9093
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_MESSAGE_MAX_BYTES: 409715200
-      KAFKA_LOG_DIRS: /var/lib/kafka/data
-      KAFKA_METADATA_LOG_DIR: /var/lib/kafka/kraft-metadata
-      CLUSTER_ID: "EWLmw6qURnOrFSdphNRUbw"
-    volumes:
-      - kafka-1-data:/var/lib/kafka/data
-      - kafka-1-metadata:/var/lib/kafka/kraft-metadata
-    ports:
-      - "9092:9092"
-    networks:
-      - telemetry-network
-    healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server=kafka-1:9093", "--list"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-
-  kafka-setup:
-    image: confluentinc/cp-kafka:latest
-    container_name: kafka-setup
-    depends_on:
-      kafka-1:
-        condition: service_healthy
-    entrypoint: /bin/sh -c "
-      for i in {1..30}; do
-      kafka-topics --bootstrap-server=kafka-1:9093 --list && break || sleep 2;
-      done &&
-      kafka-topics --bootstrap-server=kafka-1:9093 --create --if-not-exists --topic large-files --partitions 3 --replication-factor 1 --config 'max.message.bytes=400000000'"
-    networks:
-      - telemetry-network
-
-secrets:
-  influxdb-admin-username:
-    file: .env.influxdb-admin-username
-  influxdb-admin-password:
-    file: .env.influxdb-admin-password
-  influxdb-admin-token:
-    file: .env.influxdb-admin-token
-
-volumes:
-  influxdb2-data:
-  influxdb2-config:
-  kafka-1-data:
-    driver: local
-    driver_opts:
-      type: none
-      device: ./kafka-data
-      o: bind
-  kafka-1-metadata:
-    driver: local
-    driver_opts:
-      type: none
-      device: ./kafka-metadata
-      o: bind
 
 networks:
   telemetry-network:
