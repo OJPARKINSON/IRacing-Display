@@ -22,7 +22,6 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle interrupt signals for graceful shutdown
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -31,7 +30,6 @@ func main() {
 		cancel()
 	}()
 
-	// Ensure an IBT file path is provided
 	if len(os.Args) < 2 {
 		log.Fatal("Usage: ./telemetry-app <ibt-file-path>")
 	}
@@ -39,7 +37,6 @@ func main() {
 	ibtFilePath := os.Args[1]
 	log.Println("Processing IBT file:", ibtFilePath)
 
-	// Find matching files
 	files, err := filepath.Glob(ibtFilePath)
 	if err != nil {
 		log.Fatalf("Could not glob the given input files: %v", err)
@@ -51,7 +48,6 @@ func main() {
 
 	log.Printf("Found %d files to process", len(files))
 
-	// Parse the files into stubs
 	stubs, err := ibt.ParseStubs(files...)
 	if err != nil {
 		log.Fatalf("Failed to parse stubs for %v: %v", files, err)
@@ -82,40 +78,36 @@ func main() {
 	fmt.Println("TrackDisplayName:", WeekendInfo.TrackDisplayName)
 	fmt.Println("TrackID:", WeekendInfo.TrackID)
 
-	// Create wait group for parallel processing
 	var wg sync.WaitGroup
 	processedGroups := 0
 
-	// Determine optimal parallel processing count
 	parallelism := runtime.NumCPU()
 	if pEnv := os.Getenv("PARALLEL_GROUPS"); pEnv != "" {
 		if p, err := fmt.Sscanf(pEnv, "%d", &parallelism); err != nil || p < 1 {
 			parallelism = 4
 		}
 	}
-	log.Printf("Using parallelism of %d", parallelism)
+	log.Printf("Available CPUs: %d, Using parallelism of: %d", runtime.NumCPU(), parallelism)
 
-	// Create processor for each group
 	processors := make([]*loaderProcessor, 0, len(groups))
 
-	// Create semaphore to limit concurrency
 	sem := make(chan struct{}, parallelism)
 
 	for groupNumber, group := range groups {
-		// Create processor with optimal batch size
-		// Batch size is adjustable via environment variable
-		batchSize := 9000000
+		batchSize := 100000
 		if bsEnv := os.Getenv("BATCH_SIZE"); bsEnv != "" {
 			if bs, err := fmt.Sscanf(bsEnv, "%d", &batchSize); err != nil || bs < 1 {
-				batchSize = 9000000
+				batchSize = 10000
 			}
 		}
 
 		processor := newLoaderProcessor(pubSub, groupNumber, batchSize)
 		processors = append(processors, processor)
 
+		log.Printf("Started %d processing goroutines", processedGroups)
 		wg.Add(1)
 		go func(g ibt.StubGroup, p *loaderProcessor, groupNum int) {
+			log.Printf("Group %d acquired semaphore slot, starting processing", groupNum)
 			defer wg.Done()
 
 			// Acquire semaphore slot
@@ -147,6 +139,7 @@ func main() {
 	}
 
 	wg.Wait()
+	log.Printf("All %d groups have completed processing", processedGroups)
 
 	ibt.CloseAllStubs(groups)
 
@@ -155,5 +148,5 @@ func main() {
 	log.Printf("Total batches loaded: %d", pubSub.Loaded())
 
 	// The application has completed its work and will now exit
-	log.Println("All data has been processed and uploaded to InfluxDB. Exiting application.")
+	log.Println("All data has been processed and uploaded to RabbitMQ. Exiting application.")
 }

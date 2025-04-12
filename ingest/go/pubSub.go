@@ -15,35 +15,11 @@ import (
 
 var (
 	RabbitMqURL  = getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
-	MaxBatchSize = getEnvAsInt("MAX_BATCH_SIZE", 1000)
+	MaxBatchSize = getEnvAsInt("MAX_BATCH_SIZE", 1000) // 100 kb
 	BatchTimeout = getEnvAsDuration("BATCH_TIMEOUT", 10*time.Second)
 	MaxRetries   = getEnvAsInt("MAX_RETRIES", 3)
 	RetryDelay   = getEnvAsDuration("RETRY_DELAY", 500*time.Millisecond)
 )
-
-// TelemetryPoint represents a single point of telemetry data
-type TelemetryPoint struct {
-	Time               time.Time
-	SessionID          string
-	LapID              string
-	CarID              string
-	SessionNum         string
-	Brake              float64
-	Gear               int
-	LapDistPct         float64
-	Lat                float64
-	Lon                float64
-	RPM                float64
-	Speed              float64
-	SteeringWheelAngle float64
-	Throttle           float64
-	VelocityX          float64
-	VelocityY          float64
-	LapCurrentLapTime  float64
-	PlayerCarPosition  float64
-	FuelLevel          float64
-	SessionTime        float64
-}
 
 type PubSub struct {
 	conn          *amqp.Connection
@@ -55,7 +31,7 @@ type PubSub struct {
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
 	errorCh       chan error
-	pointsBuffer  [][]byte
+	pointsBuffer  []byte
 	bufferSize    int
 	maxBufferSize int
 }
@@ -90,7 +66,7 @@ func newPubSub(sessionId string) *PubSub {
 
 	err = ch.QueueBind(
 		q.Name,
-		"anonymous.#",
+		"telemetry.#",
 		"telemetry_topic",
 		false,
 		nil,
@@ -106,7 +82,7 @@ func newPubSub(sessionId string) *PubSub {
 		ctx:           ctx,
 		cancel:        cancel,
 		errorCh:       make(chan error, 100),
-		pointsBuffer:  make([][]byte, 0, MaxBatchSize),
+		pointsBuffer:  make([]byte, 0, MaxBatchSize),
 		maxBufferSize: MaxBatchSize,
 	}
 }
@@ -186,7 +162,7 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			"lap_dist_pct":         getFloatValue(record, "LapDistPct"),
 			"session_time":         sessionTime,
 			"lap_current_lap_time": getFloatValue(record, "LapCurrentLapTime"),
-			"car_id":               getIntValue(record, "PlayerCarPosition"),
+			"car_id":               getIntValue(record, "PlayerCarIdx"),
 
 			// Other telemetry fields
 			"brake":                getFloatValue(record, "Brake"),
@@ -208,7 +184,16 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			log.Printf("Error marshaling point to JSON: %v", err)
 		}
 
-		p.pointsBuffer = append(p.pointsBuffer, jsonData)
+		if point["session_num"] != "2" {
+			fmt.Println("session_num", point["session_num"])
+		}
+
+		if p.bufferSize == 0 {
+			p.pointsBuffer = append(p.pointsBuffer, '[')
+		} else {
+			p.pointsBuffer = append(p.pointsBuffer, ',')
+		}
+		p.pointsBuffer = append(p.pointsBuffer, jsonData...)
 		p.bufferSize++
 
 		// Flush if buffer is full
@@ -229,16 +214,14 @@ func (p *PubSub) flushBuffer() {
 		return
 	}
 
-	for _, point := range p.pointsBuffer {
-		body := point
-		err := p.ch.PublishWithContext(p.ctx, "telemetry_topic", "anonymous.info", false, false, amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        point,
-		})
-		failOnError(err, "Failed to publish message")
+	p.pointsBuffer = append(p.pointsBuffer, ']')
 
-		log.Printf(" [x] Sent %s", body)
-	}
+	err := p.ch.PublishWithContext(p.ctx, "telemetry_topic", "telemetry.ticks", true, false, amqp.Publishing{
+		ContentType: "text/plain",
+		Body:        p.pointsBuffer,
+	})
+
+	failOnError(err, "Failed to publish message")
 
 	log.Printf("Flushed %d points to RabbitMQ for session %s (%d points/sec)",
 		p.bufferSize, p.sessionID, len(p.pointsBuffer))

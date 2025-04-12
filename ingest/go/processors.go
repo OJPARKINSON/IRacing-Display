@@ -70,7 +70,7 @@ func (l *loaderProcessor) Whitelist() []string {
 	return []string{
 		"Lap", "LapDistPct", "Speed", "Throttle", "Brake", "Gear", "RPM",
 		"SteeringWheelAngle", "VelocityX", "VelocityY", "Lat", "Lon", "SessionTime",
-		"LapCurrentLapTime", "PlayerCarPosition", "FuelLevel",
+		"LapCurrentLapTime", "PlayerCarPosition", "FuelLevel", "PlayerCarIdx",
 	}
 }
 
