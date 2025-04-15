@@ -41,23 +41,35 @@ services:
     volumes:
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
       - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     networks:
       - telemetry-network
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
     
   telemetry_service:
-    build: telemetryService/.
+    build: ./telemetryService
     container_name: telemetry_service
+    restart: on-failure
     depends_on:
       influxdb:
         condition: service_healthy
       rabbitMQ:
-       condition: service_healthy
+        condition: service_healthy
     networks:
       - telemetry-network
     environment:
-      INFLUX_URL: http://influxdb:8086
-
-    
+      INFLUX_URL: http://localhost:8086
+      INFLUX_BUCKET: telemetry
+      INFLUX_ORG: myorg
+      
 secrets:
   influxdb-admin-username:
     file: .env.influxdb-admin-username
@@ -73,5 +85,4 @@ volumes:
 
 networks:
   telemetry-network:
-    external: true
     driver: bridge
