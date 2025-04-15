@@ -47,7 +47,7 @@ namespace TelemetryService.Services
                     );
                 }
                 
-                writeApi.WritePoints(pointData, "temp", "myorg"); 
+                writeApi.WritePoints(pointData, "telemetry", "myorg"); 
                 Console.WriteLine("Data sent");
             }
         }
@@ -69,9 +69,6 @@ namespace TelemetryService.Services
                     break;
                 case WriteRuntimeExceptionEvent error:
                     Console.WriteLine($"WriteRuntimeExceptionEvent: {error.Exception.Message}");
-                    break;
-                default:
-                    Console.WriteLine(eventArgs);
                     break;
             }
         }

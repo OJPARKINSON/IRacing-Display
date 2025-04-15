@@ -1,6 +1,4 @@
 using System.Text;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.ObjectPool;
 using Newtonsoft.Json;
 using TelemetryService.Models;
 
@@ -13,27 +11,49 @@ namespace TelemetryService.Services
             NullValueHandling = NullValueHandling.Ignore,
             MissingMemberHandling = MissingMemberHandling.Ignore
         };
+        
         public List<TelemetryData> Parse(string input)
         {
-            var jsonArr = SplitString(input);
             var results = new List<TelemetryData>();
-            results.Capacity = jsonArr.Count;
             
-            foreach (var json in jsonArr)
+            try
             {
-                try
+                if (input.TrimStart().StartsWith("[") && input.TrimEnd().EndsWith("]"))
                 {
-                    var data = Newtonsoft.Json.JsonConvert.DeserializeObject<TelemetryData>(json, _jsonSettings);
-                    if (data != null)
+                    Console.WriteLine("Parsing input as JSON array");
+                    var dataArray = JsonConvert.DeserializeObject<List<TelemetryData>>(input, _jsonSettings);
+                    if (dataArray != null && dataArray.Count > 0)
                     {
-                        results.Add(data);
+                        Console.WriteLine($"Successfully parsed {dataArray.Count} data points from JSON array");
+                        return dataArray;
                     }
                 }
-                catch (Exception ex)
+                
+                Console.WriteLine("Falling back to JSON object parsing");
+                var jsonArr = SplitString(input);
+                results.Capacity = jsonArr.Count;
+                
+                foreach (var json in jsonArr)
                 {
-                    Console.WriteLine($"Error parsing JSON: {ex.Message}");
-                    Console.WriteLine($"Problematic JSON: {json.Substring(0, Math.Min(100, json.Length))}...");
+                    try
+                    {
+                        var data = JsonConvert.DeserializeObject<TelemetryData>(json, _jsonSettings);
+                        if (data != null)
+                        {
+                            results.Add(data);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error parsing JSON: {ex.Message}");
+                        Console.WriteLine($"Problematic JSON: {json.Substring(0, Math.Min(100, json.Length))}...");
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in Parse method: {ex.Message}");
+                Console.WriteLine($"Input: {input.Substring(0, Math.Min(100, input.Length))}...");
             }
 
             return results;
@@ -45,6 +65,12 @@ namespace TelemetryService.Services
             jsonObjects.Capacity = Math.Max(10, input.Length/500);
             int depth = 0;
             int startIndex = 0;
+            
+            if (input.TrimStart().StartsWith("[") && input.TrimEnd().EndsWith("]"))
+            {
+                input = input.TrimStart().Substring(1, input.TrimEnd().Length - 2);
+            }
+            
             for (int i = 0; i < input.Length; i++)
             {
                 char c = input[i];
@@ -70,5 +96,4 @@ namespace TelemetryService.Services
             return jsonObjects;
         }
     }
-};
-
+}
