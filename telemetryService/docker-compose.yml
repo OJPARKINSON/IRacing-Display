@@ -43,7 +43,21 @@ services:
       - rabbitmq-data:/var/lib/rabbitmq
     networks:
       - telemetry-network
+    
+  telemetry_service:
+    build: telemetryService/.
+    container_name: telemetry_service
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      rabbitMQ:
+       condition: service_healthy
+    networks:
+      - telemetry-network
+    environment:
+      INFLUX_URL: http://influxdb:8086
 
+    
 secrets:
   influxdb-admin-username:
     file: .env.influxdb-admin-username
@@ -60,3 +74,4 @@ volumes:
 networks:
   telemetry-network:
     external: true
+    driver: bridge
