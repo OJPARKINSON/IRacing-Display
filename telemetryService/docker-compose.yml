@@ -31,6 +31,11 @@ services:
         hard: 65536
     networks:
       - telemetry-network
+    deploy:
+      resources:
+        limits:
+          cpus: .2
+          memory: 1g
 
   rabbitMQ:
     container_name: rabbitMQ
@@ -53,7 +58,12 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
-    
+    deploy:
+      resources:
+        limits:
+          cpus: .2
+          memory: 1g
+   
   telemetry_service:
     build: ./telemetryService
     container_name: telemetry_service
@@ -66,9 +76,14 @@ services:
     networks:
       - telemetry-network
     environment:
-      INFLUX_URL: http://localhost:8086
+      INFLUX_URL: http://influxdb:8086
       INFLUX_BUCKET: telemetry
       INFLUX_ORG: myorg
+    deploy:
+      resources:
+        limits:
+          cpus: .2
+          memory: 1g
       
 secrets:
   influxdb-admin-username:
