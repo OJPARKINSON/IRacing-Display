@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using InfluxDB.Client;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using TelemetryService.Config;
 using TelemetryService.Services;
@@ -13,16 +14,6 @@ namespace TelemetryService
             try
             {
                 LoadEnvironmentVariables();
-                
-                var influxUrl = Environment.GetEnvironmentVariable("INFLUX_URL");
-                var influxToken = Environment.GetEnvironmentVariable("INFLUX_TOKEN");
-                var influxBucket = Environment.GetEnvironmentVariable("INFLUX_BUCKET");
-                var influxOrg = Environment.GetEnvironmentVariable("INFLUX_ORG");
-                
-                Console.WriteLine($"InfluxDB URL: {influxUrl}");
-                Console.WriteLine($"InfluxDB Token is {influxToken}");
-                Console.WriteLine($"InfluxDB Bucket: {influxBucket}");
-                Console.WriteLine($"InfluxDB Org: {influxOrg}");
                 
                 using IHost host = CreateHostBuilder(args).Build();
 
