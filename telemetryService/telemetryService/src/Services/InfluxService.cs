@@ -11,12 +11,7 @@ namespace TelemetryService.Services
         {
             string? url = Environment.GetEnvironmentVariable("INFLUX_URL");
             string? token = Environment.GetEnvironmentVariable("INFLUX_TOKEN");
-            using var client = new InfluxDBClient(url, token);
-            
-            var getReady = client.ReadyAsync().WaitAsync(TimeSpan.FromSeconds(10));
-            var ping = client.PingAsync().WaitAsync(TimeSpan.FromSeconds(10));
-            Console.WriteLine($"InfluxDB ready: {getReady.GetAwaiter().GetResult()}");
-            Console.WriteLine($"InfluxDB ping: {ping.GetAwaiter().GetResult()}");
+            using var client = new InfluxDBClient(url, token)
             
             using (var writeApi = client.GetWriteApi())
             {
