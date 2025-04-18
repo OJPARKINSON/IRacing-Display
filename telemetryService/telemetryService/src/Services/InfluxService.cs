@@ -11,7 +11,12 @@ namespace TelemetryService.Services
         {
             string? url = Environment.GetEnvironmentVariable("INFLUX_URL");
             string? token = Environment.GetEnvironmentVariable("INFLUX_TOKEN");
-            using var client = new InfluxDBClient(url, token)
+            using var client = new InfluxDBClient(url, token);
+
+            var bucketsApi = client.GetBucketsApi();
+            var retentionRules = new BucketRetentionRules(BucketRetentionRules.TypeEnum.Expire, 0);
+
+            await bucketsApi.CreateBucketAsync($"telemetry_{telData[0].Session_id}", retentionRules, "myorg");
             
             using (var writeApi = client.GetWriteApi())
             {
@@ -47,7 +52,7 @@ namespace TelemetryService.Services
                     );
                 }
                 
-                writeApi.WritePoints(pointData, "telemetry", "myorg"); 
+                writeApi.WritePoints(pointData, $"telemetry_{telData[0].Session_id}", "myorg"); 
                 
                 writeApi.Flush();
                 
