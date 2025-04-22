@@ -51,7 +51,7 @@ namespace TelemetryService.Services.Subscriber
         {
             var factory = new ConnectionFactory
             {
-                HostName = "rabbitMQ",
+                HostName = "localhost",
                 Port = 5672,
                 UserName = "guest",
                 Password = "guest",
