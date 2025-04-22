@@ -7,16 +7,48 @@ namespace TelemetryService.Services
 {
     public class InfluxService
     {
+        private readonly Dictionary<string, bool> _createdBuckets = new Dictionary<string, bool>();
+
         public async Task WriteTicks(List<TelemetryData> telData)
         {
+            if (telData == null || telData.Count == 0)
+            {
+                Console.WriteLine("No telemetry data to write");
+                return;
+            }
+
             string? url = Environment.GetEnvironmentVariable("INFLUX_URL");
             string? token = Environment.GetEnvironmentVariable("INFLUX_TOKEN");
             using var client = new InfluxDBClient(url, token);
 
-            var bucketsApi = client.GetBucketsApi();
-            var retentionRules = new BucketRetentionRules(BucketRetentionRules.TypeEnum.Expire, 0);
+            string bucketName = $"telemetry_{telData[0].Session_id}";
+            
+            if (!_createdBuckets.ContainsKey(bucketName))
+            {
+                try
+                {
+                    var bucketsApi = client.GetBucketsApi();
+                    var buckets = await bucketsApi.FindBucketsAsync();
+                    bool bucketExists = buckets.Any(b => b.Name == bucketName);
 
-            await bucketsApi.CreateBucketAsync($"telemetry_{telData[0].Session_id}", retentionRules, "myorg");
+                    if (!bucketExists)
+                    {
+                        Console.WriteLine($"Creating new bucket: {bucketName}");
+                        var retentionRules = new BucketRetentionRules(BucketRetentionRules.TypeEnum.Expire, 0);
+                        await bucketsApi.CreateBucketAsync(bucketName, retentionRules, "myorg");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Bucket {bucketName} already exists");
+                    }
+
+                    _createdBuckets[bucketName] = true;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error checking/creating bucket: {ex.Message}");
+                }
+            }
             
             using (var writeApi = client.GetWriteApi())
             {
@@ -52,11 +84,11 @@ namespace TelemetryService.Services
                     );
                 }
                 
-                writeApi.WritePoints(pointData, $"telemetry_{telData[0].Session_id}", "myorg"); 
+                writeApi.WritePoints(pointData, bucketName, "myorg"); 
                 
                 writeApi.Flush();
                 
-                Console.WriteLine("Data sent");
+                Console.WriteLine($"Data sent: {pointData.Count} points to bucket {bucketName}");
             }
         }
 
