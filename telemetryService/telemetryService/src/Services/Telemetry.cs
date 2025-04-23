@@ -20,7 +20,6 @@ namespace TelemetryService.Services
             {
                 if (input.TrimStart().StartsWith("[") && input.TrimEnd().EndsWith("]"))
                 {
-                    Console.WriteLine("Parsing input as JSON array");
                     var dataArray = JsonConvert.DeserializeObject<List<TelemetryData>>(input, _jsonSettings);
                     if (dataArray != null && dataArray.Count > 0)
                     {

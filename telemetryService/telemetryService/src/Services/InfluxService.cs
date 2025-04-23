@@ -8,6 +8,49 @@ namespace TelemetryService.Services
     public class InfluxService
     {
         private readonly Dictionary<string, bool> _createdBuckets = new Dictionary<string, bool>();
+        
+        public async Task InitializeAsync()
+        {
+            string? url = Environment.GetEnvironmentVariable("INFLUX_URL");
+            string? token = Environment.GetEnvironmentVariable("INFLUX_TOKEN");
+            
+            if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
+            {
+                Console.WriteLine($"ERROR: InfluxDB configuration is incomplete. URL: {(string.IsNullOrEmpty(url) ? "MISSING" : "OK")}, Token: {(string.IsNullOrEmpty(token) ? "MISSING" : "OK")}");
+                return;
+            }
+            
+            try
+            {
+                Console.WriteLine($"Testing connection to InfluxDB at {url}...");
+                using var client = new InfluxDBClient(url, token);
+                
+                var health = await client.HealthAsync();
+                Console.WriteLine($"InfluxDB health check result: {health.Status}");
+                
+                var orgsApi = client.GetOrganizationsApi();
+                var orgs = await orgsApi.FindOrganizationsAsync();
+                if (orgs != null && orgs.Any())
+                {
+                    Console.WriteLine($"Found {orgs.Count} organization(s). Default org: {orgs.First().Name}");
+                }
+                else
+                {
+                    Console.WriteLine("WARNING: No organizations found. This may cause writes to fail.");
+                }
+                
+                Console.WriteLine("InfluxDB connection test completed successfully");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: Failed to connect to InfluxDB: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+                }
+                Console.WriteLine("Please check your InfluxDB configuration and ensure the service is running");
+            }
+        }
 
         public async Task WriteTicks(List<TelemetryData> telData)
         {
@@ -19,6 +62,13 @@ namespace TelemetryService.Services
 
             string? url = Environment.GetEnvironmentVariable("INFLUX_URL");
             string? token = Environment.GetEnvironmentVariable("INFLUX_TOKEN");
+            
+            if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
+            {
+                Console.WriteLine($"ERROR: InfluxDB configuration is incomplete. URL: {(string.IsNullOrEmpty(url) ? "MISSING" : "OK")}, Token: {(string.IsNullOrEmpty(token) ? "MISSING" : "OK")}");
+                return;
+            }
+            
             using var client = new InfluxDBClient(url, token);
 
             string bucketName = $"telemetry_{telData[0].Session_id}";
@@ -34,8 +84,23 @@ namespace TelemetryService.Services
                     if (!bucketExists)
                     {
                         Console.WriteLine($"Creating new bucket: {bucketName}");
+                        
+                        var orgsApi = client.GetOrganizationsApi();
+                        var orgs = await orgsApi.FindOrganizationsAsync();
+                        
+                        if (orgs == null || !orgs.Any())
+                        {
+                            Console.WriteLine("ERROR: No organizations found in InfluxDB!");
+                            return;
+                        }
+                        
+                        var orgId = orgs.First().Id;
+                        Console.WriteLine($"Using organization ID: {orgId}");
+                        
                         var retentionRules = new BucketRetentionRules(BucketRetentionRules.TypeEnum.Expire, 0);
-                        await bucketsApi.CreateBucketAsync(bucketName, retentionRules, "myorg");
+                        
+                        var bucket = await bucketsApi.CreateBucketAsync(bucketName, orgId);
+                        Console.WriteLine($"Successfully created bucket: {bucket.Name} with ID: {bucket.Id}");
                     }
                     else
                     {
@@ -50,65 +115,101 @@ namespace TelemetryService.Services
                 }
             }
             
-            using (var writeApi = client.GetWriteApi())
+            try
             {
-                writeApi.EventHandler += handleEvents;
-                
-                List<PointData> pointData = [];
-
-                foreach (var tel in telData)
+                using (var writeApi = client.GetWriteApi())
                 {
-                    pointData.Add(
-                        PointData
-                            .Measurement("tel")
-                            .Tag("lap_id", tel.Lap_id)
-                            .Tag("session_id", tel.Session_id)
-                            .Tag("session_num", tel.Session_num)
-                            .Field("speed", tel.Speed)
-                            .Field("lap_dist_pct", tel.Lap_dist_pct)
-                            .Field("session_time", tel.Session_time)
-                            .Field("lap_current_lap_time", tel.Lap_current_lap_time)
-                            .Field("car_id", tel.Car_id)
-                            .Field("brake", tel.Brake)
-                            .Field("throttle", tel.Throttle)
-                            .Field("gear", tel.Gear)
-                            .Field("rpm", tel.Rpm)
-                            .Field("steering_wheel_angle", tel.Steering_wheel_angle)
-                            .Field("velocity_x", tel.Velocity_x)
-                            .Field("velocity_y", tel.Velocity_y)
-                            .Field("lat", tel.Lat)
-                            .Field("lon", tel.Lon)
-                            .Field("player_car_position", tel.Player_car_position)
-                            .Field("fuel_level", tel.Fuel_level)
-                            .Timestamp(DateTime.UtcNow.AddSeconds(-10), WritePrecision.Ns)
-                    );
+                    writeApi.EventHandler += HandleEvents;
+                    
+                    List<PointData> pointData = [];
+
+                    foreach (var tel in telData)
+                    {
+                        pointData.Add(
+                            PointData
+                                .Measurement("tel")
+                                .Tag("lap_id", tel.Lap_id)
+                                .Tag("session_id", tel.Session_id)
+                                .Tag("session_num", tel.Session_num)
+                                .Field("speed", tel.Speed)
+                                .Field("lap_dist_pct", tel.Lap_dist_pct)
+                                .Field("session_time", tel.Session_time)
+                                .Field("lap_current_lap_time", tel.Lap_current_lap_time)
+                                .Field("car_id", tel.Car_id)
+                                .Field("brake", tel.Brake)
+                                .Field("throttle", tel.Throttle)
+                                .Field("gear", tel.Gear)
+                                .Field("rpm", tel.Rpm)
+                                .Field("steering_wheel_angle", tel.Steering_wheel_angle)
+                                .Field("velocity_x", tel.Velocity_x)
+                                .Field("velocity_y", tel.Velocity_y)
+                                .Field("lat", tel.Lat)
+                                .Field("lon", tel.Lon)
+                                .Field("player_car_position", tel.Player_car_position)
+                                .Field("fuel_level", tel.Fuel_level)
+                                .Timestamp(DateTime.UtcNow.AddSeconds(-10), WritePrecision.Ns)
+                        );
+                    }
+                    
+                    Console.WriteLine($"Attempting to write {pointData.Count} points to bucket '{bucketName}' in org 'myorg'");
+                    writeApi.WritePoints(pointData, bucketName, "myorg"); 
+                    
+                    Console.WriteLine("Flushing data to InfluxDB...");
+                    writeApi.Flush();
+                    
+                    Console.WriteLine($"Data sent: {pointData.Count} points to bucket {bucketName}");
                 }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR writing to InfluxDB: {ex.Message}");
+                Console.WriteLine($"Exception type: {ex.GetType().Name}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 
-                writeApi.WritePoints(pointData, bucketName, "myorg"); 
-                
-                writeApi.Flush();
-                
-                Console.WriteLine($"Data sent: {pointData.Count} points to bucket {bucketName}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+                    Console.WriteLine($"Inner exception type: {ex.InnerException.GetType().Name}");
+                }
             }
         }
 
-        private void handleEvents(object? sender, EventArgs eventArgs)
+        private void HandleEvents(object? sender, EventArgs eventArgs)
         {
             switch (eventArgs)
             {
                 case WriteSuccessEvent successEvent:
-                    Console.WriteLine("WriteSuccessEvent: point was successfully written to InfluxDB");
+                    Console.WriteLine("✅ WriteSuccessEvent: point was successfully written to InfluxDB");
                     break;
                 case WriteErrorEvent errorEvent:
-                    Console.WriteLine($"WriteErrorEvent: {errorEvent.Exception.Message}");
-                    Console.WriteLine($"  - {errorEvent.LineProtocol}");
+                    Console.WriteLine($"❌ WRITE ERROR: {errorEvent.Exception.Message}");
+                    Console.WriteLine($"  - Protocol: {errorEvent.LineProtocol}");
+                    if (errorEvent.Exception.InnerException != null)
+                    {
+                        Console.WriteLine($"  - Inner exception: {errorEvent.Exception.InnerException.Message}");
+                    }
+                    Console.WriteLine($"  - Stack trace: {errorEvent.Exception.StackTrace}");
                     break;
                 case WriteRetriableErrorEvent error:
-                    Console.WriteLine($"WriteRetriableErrorEvent: {error.Exception.Message}");
-                    Console.WriteLine($"  - {error.LineProtocol}");
+                    Console.WriteLine($"RETRIABLE ERROR: {error.Exception.Message}");
+                    Console.WriteLine($"  - Protocol: {error.LineProtocol}");
+                    Console.WriteLine($"  - This error is retriable and will be retried automatically");
+                    if (error.Exception.InnerException != null)
+                    {
+                        Console.WriteLine($"  - Inner exception: {error.Exception.InnerException.Message}");
+                    }
                     break;
                 case WriteRuntimeExceptionEvent error:
-                    Console.WriteLine($"WriteRuntimeExceptionEvent: {error.Exception.Message}");
+                    Console.WriteLine($"💥 RUNTIME EXCEPTION: {error.Exception.Message}");
+                    Console.WriteLine($"  - Exception type: {error.Exception.GetType().Name}");
+                    Console.WriteLine($"  - Stack trace: {error.Exception.StackTrace}");
+                    if (error.Exception.InnerException != null)
+                    {
+                        Console.WriteLine($"  - Inner exception: {error.Exception.InnerException.Message}");
+                    }
+                    break;
+                default:
+                    Console.WriteLine($"📝 Unknown event: {eventArgs.GetType().Name}");
                     break;
             }
         }
