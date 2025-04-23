@@ -341,7 +341,7 @@ export default function TrackMap({
         pointToDisplay = similarPoints.reduce(
           (closest, current) =>
             Math.abs(current.LapDistPct - lapDistPct) <
-            Math.abs(closest.LapDistPct - lapDistPct)
+              Math.abs(closest.LapDistPct - lapDistPct)
               ? current
               : closest,
           similarPoints[0]
@@ -353,6 +353,13 @@ export default function TrackMap({
       const markerFeature = new Feature({
         geometry: new Point(pointToDisplay.coordinates),
       });
+
+      let displayText = `${pointToDisplay.LapDistPct.toFixed(1)}% - ${pointToDisplay.Speed.toFixed(1)}kph`;
+
+      if (Math.abs(pointToDisplay.LapDistPct) < 0.5 ||
+        Math.abs(pointToDisplay.LapDistPct - 100) < 0.5) {
+        displayText = `Start/Finish - ${pointToDisplay.Speed.toFixed(1)}kph`;
+      }
 
       markerFeature.setStyle(
         new Style({
@@ -367,9 +374,7 @@ export default function TrackMap({
             }),
           }),
           text: new Text({
-            text: `${pointToDisplay.LapDistPct.toFixed(
-              1
-            )}% - ${pointToDisplay.Speed.toFixed(1)}kph`,
+            text: displayText,
             offsetY: -15,
             font: "12px sans-serif",
             fill: new Fill({
@@ -385,7 +390,6 @@ export default function TrackMap({
 
       selectedMarkerSourceRef.current.addFeature(markerFeature);
 
-      // Animate to the selected point when scrubbing
       if (isScrubbing && olMapRef.current) {
         olMapRef.current.getView().animate({
           center: pointToDisplay.coordinates,
@@ -393,14 +397,8 @@ export default function TrackMap({
         });
       }
     }
-  }, [
-    selectedPointIndex,
-    dataWithCoordinates,
-    isScrubbing,
-    selectedMarkerSourceRef,
-  ]);
+  }, [selectedPointIndex, dataWithCoordinates, isScrubbing, selectedMarkerSourceRef]);
 
-  // Zoom control handlers
   const handleZoomIn = (): void => {
     if (olMapRef.current) {
       const view = olMapRef.current.getView();

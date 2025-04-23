@@ -22,7 +22,7 @@ export default function TelemetryPage({ params }: Params) {
   const lapId = searchParams.get("lapId");
   const { sessionId } = use(params);
 
-  const isClockwise = 1;
+  const isClockwise = 0;
 
   const [selectedPointIndex, setSelectedPointIndex] = useState<number>(0);
   const [selectedMetric, setSelectedMetric] = useState<string>("Speed");

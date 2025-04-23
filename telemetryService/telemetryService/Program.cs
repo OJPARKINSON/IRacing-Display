@@ -16,9 +16,6 @@ namespace TelemetryService
                 LoadEnvironmentVariables();
                 
                 using IHost host = CreateHostBuilder(args).Build();
-
-                var influxService = host.Services.GetRequiredService<InfluxService>();
-                await influxService.InitializeAsync();
                 
                 var subscriber = host.Services.GetRequiredService<Subscriber>();
                 

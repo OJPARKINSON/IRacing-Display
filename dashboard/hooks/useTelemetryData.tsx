@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, RefObject } from "react";
+import { TelemetryDataPoint } from "@/lib/types";
 
 export function useTelemetryData(
   telemetry: any[] | undefined,
   trackPath: SVGPathElement | null,
   startFinishPosition: number,
   svgContainerRef: RefObject<HTMLDivElement>,
-  isClockwise: number = 0 // 0 for counterclockwise (default), 1 for clockwise
+  isClockwise: number = 0
 ) {
   const [processError, setProcessError] = useState<string | null>(null);
 
@@ -32,22 +33,15 @@ export function useTelemetryData(
       const speedRange = maxSpeed - minSpeed;
 
       return telemetry
-        .map((point) => {
-          // Adjust and normalize LapDistPct to ensure consistency
-          const adjustedLapPct = (point.LapDistPct / 100) % 1.0; // Ensure 0-1 range
+        .map((point, index) => {
+          let adjustedLapPct = (point.LapDistPct / 100) % 1.0;
 
-          // More accurate path position calculation
           let pathPosition;
+
           if (isClockwise) {
-            // For clockwise tracks, we move backward from start position
-            pathPosition =
-              ((1 - adjustedLapPct) * totalLength + startFinishPosition) %
-              totalLength;
+            pathPosition = (startFinishPosition + adjustedLapPct * totalLength) % totalLength;
           } else {
-            // For counterclockwise tracks, we move forward from start position
-            pathPosition =
-              (adjustedLapPct * totalLength + startFinishPosition) %
-              totalLength;
+            pathPosition = (startFinishPosition - adjustedLapPct * totalLength + totalLength) % totalLength;
           }
 
           const basePoint = pathElement.getPointAtLength(pathPosition);
@@ -82,13 +76,12 @@ export function useTelemetryData(
 
             offsetMagnitude *= 1 + speedFactor * 0.5;
 
-            // Adjust racing line for corners to be more accurate
             if (brakeFactor > 0.3) {
-              offsetMagnitude *= 1 - brakeFactor * 0.7; // Reduce racingLine offset when braking
+              offsetMagnitude *= 1 - brakeFactor * 0.7;
             }
 
             if (throttleFactor > 0.7 && Math.abs(steeringFactor) > 0.2) {
-              offsetMagnitude *= 1 + throttleFactor * 0.8; // Increase racingLine offset when accelerating out of corners
+              offsetMagnitude *= 1 + throttleFactor * 0.8;
             }
 
             offsetX =
@@ -105,8 +98,7 @@ export function useTelemetryData(
 
           if (speedRange > 0) {
             const speedFactor = (point.Speed - minSpeed) / speedRange;
-            // Make line position more accurate by having it follow a tighter inside line in slow corners
-            const speedAdjustment = 0.8 + 0.5 * speedFactor; // Tighter line at slow speeds (corners)
+            const speedAdjustment = 0.8 + 0.5 * speedFactor;
 
             offsetX *= speedAdjustment;
             offsetY *= speedAdjustment;
@@ -126,18 +118,17 @@ export function useTelemetryData(
           return {
             ...point,
             coordinates: [finalY, finalX] as [number, number],
-            pathPosition, // Store path position for debugging
-            originalIndex: point.originalIndex, // Keep the original index
-            speed: point.Speed, // Store speed explicitly for debugging
+            pathPosition,
+            originalIndex: index,
+            speed: point.Speed,
           };
-        })
-        .sort((a, b) => a.originalIndex - b.originalIndex);
+        });
     } catch (error) {
       console.error("Error calculating coordinates:", error);
       setProcessError("Error processing telemetry data with track path.");
       return [];
     }
-  }, [telemetry, trackPath, startFinishPosition, svgContainerRef]);
+  }, [telemetry, trackPath, startFinishPosition, svgContainerRef, isClockwise]);
 
   return {
     dataWithCoordinates,

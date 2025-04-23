@@ -13,8 +13,8 @@ export async function GET(): Promise<
   try {
     const client = getInfluxDBClient();
 
-    const buck = new BucketsAPI(client);
-    const bucketList = await buck.getBuckets();
+    const bucketApi = new BucketsAPI(client);
+    const bucketList = await bucketApi.getBuckets();
 
     console.log(`Found ${bucketList.buckets?.length} unique sessions`);
     console.log(bucketList.buckets);
