@@ -5,51 +5,24 @@ using TelemetryService.Models;
 
 namespace TelemetryService.Services
 {
-    public class InfluxService
+    public class InfluxService : IDisposable
     {
         private readonly Dictionary<string, bool> _createdBuckets = new Dictionary<string, bool>();
-        
-        public async Task InitializeAsync()
+        private readonly InfluxDBClient _client;
+        private string? _organizationId;
+
+        public InfluxService()
         {
             string? url = Environment.GetEnvironmentVariable("INFLUX_URL");
-            string? token = Environment.GetEnvironmentVariable("INFLUX_TOKEN");
-            
+            string? token = System.IO.File.ReadAllText("/run/secrets/influxdb-admin-token").Trim();
+
             if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
             {
                 Console.WriteLine($"ERROR: InfluxDB configuration is incomplete. URL: {(string.IsNullOrEmpty(url) ? "MISSING" : "OK")}, Token: {(string.IsNullOrEmpty(token) ? "MISSING" : "OK")}");
                 return;
             }
-            
-            try
-            {
-                Console.WriteLine($"Testing connection to InfluxDB at {url}...");
-                using var client = new InfluxDBClient(url, token);
-                
-                var health = await client.HealthAsync();
-                Console.WriteLine($"InfluxDB health check result: {health.Status}");
-                
-                var orgsApi = client.GetOrganizationsApi();
-                var orgs = await orgsApi.FindOrganizationsAsync();
-                if (orgs != null && orgs.Any())
-                {
-                    Console.WriteLine($"Found {orgs.Count} organization(s). Default org: {orgs.First().Name}");
-                }
-                else
-                {
-                    Console.WriteLine("WARNING: No organizations found. This may cause writes to fail.");
-                }
-                
-                Console.WriteLine("InfluxDB connection test completed successfully");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"ERROR: Failed to connect to InfluxDB: {ex.Message}");
-                if (ex.InnerException != null)
-                {
-                    Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
-                }
-                Console.WriteLine("Please check your InfluxDB configuration and ensure the service is running");
-            }
+
+            _client = new InfluxDBClient(url, token);
         }
 
         public async Task WriteTicks(List<TelemetryData> telData)
@@ -61,44 +34,42 @@ namespace TelemetryService.Services
             }
 
             string? url = Environment.GetEnvironmentVariable("INFLUX_URL");
-            string? token = Environment.GetEnvironmentVariable("INFLUX_TOKEN");
-            
+            string? token = System.IO.File.ReadAllText("/run/secrets/influxdb-admin-token").Trim();
+
             if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
             {
                 Console.WriteLine($"ERROR: InfluxDB configuration is incomplete. URL: {(string.IsNullOrEmpty(url) ? "MISSING" : "OK")}, Token: {(string.IsNullOrEmpty(token) ? "MISSING" : "OK")}");
                 return;
             }
-            
-            using var client = new InfluxDBClient(url, token);
 
             string bucketName = $"telemetry_{telData[0].Session_id}";
-            
+
             if (!_createdBuckets.ContainsKey(bucketName))
             {
                 try
                 {
-                    var bucketsApi = client.GetBucketsApi();
+                    var bucketsApi = _client.GetBucketsApi();
                     var buckets = await bucketsApi.FindBucketsAsync();
                     bool bucketExists = buckets.Any(b => b.Name == bucketName);
 
                     if (!bucketExists)
                     {
                         Console.WriteLine($"Creating new bucket: {bucketName}");
-                        
-                        var orgsApi = client.GetOrganizationsApi();
+
+                        var orgsApi = _client.GetOrganizationsApi();
                         var orgs = await orgsApi.FindOrganizationsAsync();
-                        
+
                         if (orgs == null || !orgs.Any())
                         {
                             Console.WriteLine("ERROR: No organizations found in InfluxDB!");
                             return;
                         }
-                        
+
                         var orgId = orgs.First().Id;
                         Console.WriteLine($"Using organization ID: {orgId}");
-                        
+
                         var retentionRules = new BucketRetentionRules(BucketRetentionRules.TypeEnum.Expire, 0);
-                        
+
                         var bucket = await bucketsApi.CreateBucketAsync(bucketName, orgId);
                         Console.WriteLine($"Successfully created bucket: {bucket.Name} with ID: {bucket.Id}");
                     }
@@ -114,20 +85,20 @@ namespace TelemetryService.Services
                     Console.WriteLine($"Error checking/creating bucket: {ex.Message}");
                 }
             }
-            
+
             try
             {
-                using (var writeApi = client.GetWriteApi())
+                using (var writeApi = _client.GetWriteApi())
                 {
                     writeApi.EventHandler += HandleEvents;
-                    
+
                     List<PointData> pointData = [];
 
                     foreach (var tel in telData)
                     {
                         pointData.Add(
                             PointData
-                                .Measurement("tel")
+                                .Measurement("telemetry_ticks")
                                 .Tag("lap_id", tel.Lap_id)
                                 .Tag("session_id", tel.Session_id)
                                 .Tag("session_num", tel.Session_num)
@@ -150,13 +121,13 @@ namespace TelemetryService.Services
                                 .Timestamp(DateTime.UtcNow.AddSeconds(-10), WritePrecision.Ns)
                         );
                     }
-                    
+
                     Console.WriteLine($"Attempting to write {pointData.Count} points to bucket '{bucketName}' in org 'myorg'");
-                    writeApi.WritePoints(pointData, bucketName, "myorg"); 
-                    
+                    writeApi.WritePoints(pointData, bucketName, "myorg");
+
                     Console.WriteLine("Flushing data to InfluxDB...");
                     writeApi.Flush();
-                    
+
                     Console.WriteLine($"Data sent: {pointData.Count} points to bucket {bucketName}");
                 }
             }
@@ -165,7 +136,7 @@ namespace TelemetryService.Services
                 Console.WriteLine($"ERROR writing to InfluxDB: {ex.Message}");
                 Console.WriteLine($"Exception type: {ex.GetType().Name}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
-                
+
                 if (ex.InnerException != null)
                 {
                     Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
@@ -212,6 +183,11 @@ namespace TelemetryService.Services
                     Console.WriteLine($"📝 Unknown event: {eventArgs.GetType().Name}");
                     break;
             }
+        }
+
+        public void Dispose()
+        {
+            _client?.Dispose();
         }
     }
 }

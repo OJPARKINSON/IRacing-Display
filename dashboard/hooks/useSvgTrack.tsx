@@ -12,7 +12,7 @@ export function useSvgTrack() {
 
     const loadSvg = async (): Promise<void> => {
       try {
-        const response = await fetch("http://localhost:3000/track-monza.svg");
+        const response = await fetch("/track-monza.svg");
         if (!response.ok) {
           throw new Error(`Failed to load SVG: ${response.statusText}`);
         }
@@ -32,25 +32,22 @@ export function useSvgTrack() {
           setSvgLoaded(true);
 
           // Find the start/finish line position
-          const startFinishPoint = svgDoc.getElementById(
+          const startFinishLine = svgDoc.getElementById(
             "start-finish-line"
-          ) as SVGCircleElement | null;
+          ) as SVGLineElement | null;
 
-          if (startFinishPoint) {
-            const startX = parseFloat(
-              startFinishPoint.getAttribute("x1") || "1115"
-            );
-            const startY = parseFloat(
-              startFinishPoint.getAttribute("y1") || "768"
-            );
+          if (startFinishLine) {
+            // Get coordinates from the start/finish line
+            const startX = parseFloat(startFinishLine.getAttribute("x1") || "0");
+            const startY = parseFloat(startFinishLine.getAttribute("y1") || "0");
 
-            // Find the closest point on the track path using binary search for better precision
+            // Find the closest point on the track path
             const pathLength = pathElement.getTotalLength();
             let closestPoint = 0;
             let minDistance = Number.MAX_VALUE;
 
             // First pass with fewer samples to get approximate location
-            let step = pathLength / 10;
+            let step = pathLength / 100;
             for (let i = 0; i < pathLength; i += step) {
               const point = pathElement.getPointAtLength(i);
               const distance = Math.sqrt(
@@ -89,6 +86,11 @@ export function useSvgTrack() {
                 100
               ).toFixed(2)}%)`
             );
+          } else {
+            console.warn("Start/finish line not found in SVG, using default position");
+            // Use a default position if the start/finish line isn't found
+            // For Monza, this is approximately at the bottom-right of the track
+            setStartFinishPosition(0.75 * pathElement.getTotalLength());
           }
         } else {
           throw new Error("Track path not found in SVG");

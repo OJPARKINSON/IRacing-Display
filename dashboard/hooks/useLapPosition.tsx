@@ -7,20 +7,14 @@ export function useLapPosition(
 ) {
   const lastFoundIndex = useRef<number>(0);
 
-  /**
-   * Finds the index of the telemetry point closest to the given lap distance percentage
-   */
   const findPointByLapDistPct = (lapDistPct: number): number => {
     if (!telemetryData || telemetryData.length === 0) return 0;
 
-    // Normalize the lap distance percentage to 0-100 range
     const normalizedPct = lapDistPct % 100;
 
-    // Start search from last found index for optimization
     let startIdx = lastFoundIndex.current;
     if (startIdx >= telemetryData.length) startIdx = 0;
 
-    // First check if we can find an exact match
     for (let i = 0; i < telemetryData.length; i++) {
       const idx = (startIdx + i) % telemetryData.length;
       if (Math.abs(telemetryData[idx].LapDistPct - normalizedPct) < 0.1) {
@@ -29,13 +23,11 @@ export function useLapPosition(
       }
     }
 
-    // If no exact match, find closest point
     let closestIdx = 0;
-    let minDiff = 100; // Maximum difference possible is 100
+    let minDiff = 100;
 
     for (let i = 0; i < telemetryData.length; i++) {
       const diff = Math.abs(telemetryData[i].LapDistPct - normalizedPct);
-      // Handle wrap-around case (near 0/100 boundary)
       const wrapDiff = Math.min(diff, 100 - diff);
 
       if (wrapDiff < minDiff) {
@@ -48,21 +40,15 @@ export function useLapPosition(
     return closestIdx;
   };
 
-  /**
-   * Find the two points that surround the given lap distance percentage
-   * and interpolate between them for smoother positioning
-   */
   const interpolatePosition = (lapDistPct: number) => {
     if (!telemetryData || telemetryData.length < 2) {
       return { index: 0, point: telemetryData?.[0] };
     }
 
-    // Find the closest points before and after the target lap distance
     const normalizedPct = lapDistPct % 100;
     let beforeIdx = -1;
     let afterIdx = -1;
 
-    // Handle the wrap-around case at 0/100 boundary
     const sortedPoints = [...telemetryData].sort(
       (a, b) => a.LapDistPct - b.LapDistPct
     );
@@ -76,26 +62,23 @@ export function useLapPosition(
       }
     }
 
-    // Handle wrap-around cases
     if (beforeIdx === -1) {
-      beforeIdx = sortedPoints.length - 1; // Wrap to end of array
+      beforeIdx = sortedPoints.length - 1;
     }
 
     if (afterIdx === -1) {
-      afterIdx = 0; // Wrap to beginning of array
+      afterIdx = 0;
     }
 
     const beforePoint = sortedPoints[beforeIdx];
     const afterPoint = sortedPoints[afterIdx];
 
-    // Calculate interpolation factor
     let t = 0;
     if (afterPoint.LapDistPct > beforePoint.LapDistPct) {
       t =
         (normalizedPct - beforePoint.LapDistPct) /
         (afterPoint.LapDistPct - beforePoint.LapDistPct);
     } else {
-      // Handle wrap around 0/100 boundary
       const wrappedPct =
         normalizedPct < beforePoint.LapDistPct
           ? normalizedPct + 100
@@ -105,9 +88,8 @@ export function useLapPosition(
         (afterPoint.LapDistPct + 100 - beforePoint.LapDistPct);
     }
 
-    t = Math.max(0, Math.min(1, t)); // Clamp to 0-1 range
+    t = Math.max(0, Math.min(1, t));
 
-    // Find the actual indices in the original array
     const originalBeforeIdx = telemetryData.findIndex(
       (p) =>
         p.LapDistPct === beforePoint.LapDistPct &&
@@ -124,7 +106,6 @@ export function useLapPosition(
       beforeIndex: originalBeforeIdx,
       afterIndex: originalAfterIdx,
       interpolationFactor: t,
-      // Return the closest point for simplicity
       index: t < 0.5 ? originalBeforeIdx : originalAfterIdx,
     };
   };

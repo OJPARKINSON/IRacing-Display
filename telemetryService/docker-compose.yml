@@ -79,6 +79,8 @@ services:
       INFLUX_URL: http://influxdb:8086
       INFLUX_BUCKET: telemetry
       INFLUX_ORG: myorg
+    secrets:
+      - influxdb-admin-token
     deploy:
       resources:
         limits:
