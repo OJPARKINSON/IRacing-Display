@@ -17,7 +17,6 @@ export async function GET(): Promise<
     const bucketList = await bucketApi.getBuckets();
 
     console.log(`Found ${bucketList.buckets?.length} unique sessions`);
-    console.log(bucketList.buckets);
 
     const sessionBuckets: SessionInfo[] = [];
 

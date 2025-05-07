@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { SessionInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import { fetcher } from "@/lib/fetch";
+import { fetcher } from "../lib/Fetch";
 
 export default function HomePage() {
   const { data, error } = useSWR<SessionInfo[]>("/api/sessions", fetcher);

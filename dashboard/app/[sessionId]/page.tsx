@@ -1,7 +1,7 @@
 "use client";
 
 import { TelemetryChart, InfoBox } from "@/components/InfoBox";
-import { telemetryFetcher } from "@/lib/fetch";
+import { telemetryFetcher } from "../../lib/Fetch";
 import { useSearchParams } from "next/navigation";
 import { use, useState } from "react";
 import useSWR from "swr";
