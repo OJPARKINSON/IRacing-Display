@@ -30,8 +30,7 @@ export async function GET(request: NextRequest) {
     `;
 
     console.log(
-      `Executing optimized query on bucket: ${bucketName} for lap: ${lapId}${
-        useSeparateBuckets ? "" : " and session: " + sessionId
+      `Executing optimized query on bucket: ${bucketName} for lap: ${lapId}${useSeparateBuckets ? "" : " and session: " + sessionId
       }`
     );
 
