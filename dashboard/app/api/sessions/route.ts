@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getInfluxDBClient, influxConfig } from "@/lib/influxdb";
 import { Bucket, BucketsAPI } from "@influxdata/influxdb-client-apis";
 
