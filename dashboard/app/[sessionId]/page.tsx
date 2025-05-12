@@ -1,15 +1,18 @@
 "use client";
 
-import { TelemetryChart, InfoBox } from "@/components/InfoBox";
-import { telemetryFetcher } from "../../lib/Fetch";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, ReadonlyURLSearchParams } from "next/navigation";
+import { usePathname } from 'next/navigation';
 import { use, useState } from "react";
 import useSWR from "swr";
-import { TelemetryDataPoint } from "@/lib/types";
+
+import { TelemetryChart, InfoBox } from "@/components/InfoBox";
+import { fetcher, telemetryFetcher } from "../../lib/Fetch";
 import { useTelemetryData } from "@/hooks/useTelemetryData";
 import { useTrackPosition } from "@/hooks/useTrackPosition";
 import { useSvgTrack } from "@/hooks/useSvgTrack";
 import TrackMap from "@/components/trackMap";
+import { TelemetryDataPoint } from "@/lib/types";
+import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
 interface Params {
   params: Promise<{
@@ -18,19 +21,19 @@ interface Params {
 }
 
 export default function TelemetryPage({ params }: Params) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const lapId = searchParams.get("lapId");
   const { sessionId } = use(params);
 
   const isClockwise = 0;
 
-  const [selectedPointIndex, setSelectedPointIndex] = useState<number>(0);
   const [selectedMetric, setSelectedMetric] = useState<string>("Speed");
 
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Custom hook for track SVG loading
   const {
     svgLoaded,
     trackPath,
@@ -39,13 +42,11 @@ export default function TelemetryPage({ params }: Params) {
     svgError,
   } = useSvgTrack();
 
-  // Fetch telemetry data
   const { data: telemetry, error: telError } = useSWR(
     `/api/telemetry?sessionId=telemetry_${sessionId}&lapId=${lapId}`,
     telemetryFetcher
   );
 
-  // Process telemetry data with track path
   const { dataWithCoordinates, processError } = useTelemetryData(
     telemetry,
     trackPath,
@@ -61,21 +62,21 @@ export default function TelemetryPage({ params }: Params) {
     getTrackDisplayPoint,
   } = useTrackPosition(dataWithCoordinates as TelemetryDataPoint[]);
 
-  // Set errors
   if (telError && !error) setError(telError.message);
   if (svgError && !error) setError(svgError);
   if (processError && !error) setError(processError);
 
   return (
     <div className="p-4 bg-gray-900 text-white min-h-screen">
-      <h1 className="text-2xl font-bold mb-4">iRacing Telemetry Dashboard</h1>
-      <SessionInfo sessionId={sessionId} lapId={lapId} />
+      <div className="flex justify-between">
+        <h1 className="text-2xl font-bold m-4">iRacing Telemetry Dashboard</h1>
+        <SessionInfo searchParams={searchParams} pathname={pathname} router={router} sessionId={sessionId} lapId={lapId} />
+      </div>
 
       {renderErrorMessage(error)}
       {renderLoadingMessage(telemetry, error)}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Track Map */}
         <div className="col-span-1 lg:col-span-2 bg-gray-800 p-4 rounded-lg">
           <h2 className="text-xl font-semibold mb-2">
             Monza Track Map & Racing Line
@@ -118,35 +119,65 @@ export default function TelemetryPage({ params }: Params) {
   );
 }
 
-// Component for displaying session information
 function SessionInfo({
   sessionId,
   lapId,
+  router,
+  pathname,
+  searchParams
 }: {
   sessionId: string;
   lapId: string | null;
+  router: AppRouterInstance
+  pathname: string,
+  searchParams: ReadonlyURLSearchParams
 }) {
+
+  const { data, error } = useSWR(
+    `/api/laps?sessionId=telemetry_${sessionId}`,
+    fetcher
+  );
+
+  if (error !== undefined || lapId == null) {
+    return <p>Error</p>
+  }
+
   return (
-    <div className="mb-4 text-gray-300">
+    <div className="flex gap-2 m-4 text-gray-300 items-center">
       <p>Session: {sessionId}</p>
-      <p>Lap: {lapId}</p>
+      <label className="mr-0">Lap:</label>
+      <select
+        value={lapId}
+        onChange={(e) => {
+          const params = new URLSearchParams(searchParams.toString())
+
+          params.set("lapId", e.target.value);
+
+          router.push(pathname + '?' + params.toString());
+        }}
+        className="bg-gray-700 text-white p-1 rounded"
+      >
+        {data?.laps.map((lap: string) => (
+          <option key={lap} value={lap}>
+            {lap}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
 
-// Function to render error message
 function renderErrorMessage(error: string | null) {
   if (!error) return null;
 
   return (
-    <div className="bg-red-900 text-white p-3 rounded mb-4">
+    <div className="bg-red-900 text-white m-4 rounded">
       <p className="font-semibold">Error</p>
       <p>{error}</p>
     </div>
   );
 }
 
-// Function to render loading message
 function renderLoadingMessage(telemetry: any, error: string | null) {
   if (telemetry !== undefined || error !== null) return null;
 
@@ -157,7 +188,6 @@ function renderLoadingMessage(telemetry: any, error: string | null) {
   );
 }
 
-// Available metrics for the telemetry chart
 const availableMetrics: string[] = [
   "Lap",
   "LapDistPct",
@@ -171,7 +201,6 @@ const availableMetrics: string[] = [
   "VelocityY",
   "Lat",
   "Lon",
-  "SessionTime",
   "LapCurrentLapTime",
   "PlayerCarPosition",
   "FuelLevel",

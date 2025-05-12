@@ -66,11 +66,10 @@ export const TelemetryChart = ({
   selectedIndex: number;
   onIndexChange: (index: number) => void;
 }) => {
-  // Memoize the data that we'll show on the chart for better performance
   const chartData = useMemo(() => {
     return telemetryData.map((point, index) => ({
       ...point,
-      index, // Ensure index is included for reference
+      index,
     }));
   }, [telemetryData]);
 
@@ -83,21 +82,8 @@ export const TelemetryChart = ({
     [onIndexChange]
   );
 
-  const handleMouseMove = useCallback(() => {}, []);
+  const handleMouseMove = useCallback(() => { }, []);
 
-  // Add handler to identify low speed points (corners)
-  const getLowSpeedStyle = (data: any, dataKey: string) => {
-    // Calculate 40% of max speed
-    const maxSpeed = Math.max(...chartData.map((p) => p.Speed));
-    const lowSpeedThreshold = maxSpeed * 0.4;
-
-    if (data && data[dataKey] && data.Speed < lowSpeedThreshold) {
-      return { stroke: "#f56565", strokeWidth: 3 }; // Highlight low speed portions
-    }
-    return null;
-  };
-
-  // Safe access to data properties with type checking
   const getDataValue = (point: TelemetryDataPoint, key: string): number => {
     if (key in point) {
       return (point as any)[key] as number;
@@ -105,7 +91,6 @@ export const TelemetryChart = ({
     return 0;
   };
 
-  // Find low speed points for visualization
   const lowSpeedPoints = useMemo(() => {
     if (!chartData.length) return [];
 
@@ -148,13 +133,13 @@ export const TelemetryChart = ({
             onClick={handleChartClick}
             onMouseMove={handleMouseMove}
           >
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="1 1" fillOpacity={1} />
             <XAxis
               dataKey="SessionTime"
               label={{
                 value: "Session Time (s)",
                 position: "insideBottom",
-                offset: -5,
+                offset: 0,
                 fill: "#fff",
               }}
               tick={{ fill: "#fff" }}
@@ -182,7 +167,7 @@ export const TelemetryChart = ({
                     </div>
                   );
                 }
-                return null;
+                return <></>;
               }}
             />
 
@@ -228,7 +213,6 @@ export const TelemetryChart = ({
               />
             )}
 
-            {/* Current point indicator */}
             {selectedIndex !== null &&
               selectedIndex >= 0 &&
               selectedIndex < chartData.length && (
@@ -250,8 +234,8 @@ export const TelemetryChart = ({
           <p className="text-sm text-gray-400">Brake</p>
           <p className="font-semibold">
             {telemetryData.length > 0 &&
-            selectedIndex !== null &&
-            selectedIndex >= 0
+              selectedIndex !== null &&
+              selectedIndex >= 0
               ? telemetryData[selectedIndex].Brake.toFixed(1)
               : "-"}
           </p>
@@ -260,8 +244,8 @@ export const TelemetryChart = ({
           <p className="text-sm text-gray-400">LapDistPct</p>
           <p className="font-semibold">
             {telemetryData.length > 0 &&
-            selectedIndex !== null &&
-            selectedIndex >= 0
+              selectedIndex !== null &&
+              selectedIndex >= 0
               ? telemetryData[selectedIndex].LapDistPct.toFixed(1)
               : "-"}
           </p>
@@ -270,8 +254,8 @@ export const TelemetryChart = ({
           <p className="text-sm text-gray-400">Speed</p>
           <p className="font-semibold">
             {telemetryData.length > 0 &&
-            selectedIndex !== null &&
-            selectedIndex >= 0
+              selectedIndex !== null &&
+              selectedIndex >= 0
               ? telemetryData[selectedIndex].Speed.toFixed(1)
               : "-"}
           </p>
@@ -280,8 +264,8 @@ export const TelemetryChart = ({
           <p className="text-sm text-gray-400">Throttle</p>
           <p className="font-semibold">
             {telemetryData.length > 0 &&
-            selectedIndex !== null &&
-            selectedIndex >= 0
+              selectedIndex !== null &&
+              selectedIndex >= 0
               ? telemetryData[selectedIndex].Throttle.toFixed(1)
               : "-"}
           </p>
