@@ -34,8 +34,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: .2
-          memory: 1g
+          cpus: 2
+          memory: 2g
 
   rabbitMQ:
     container_name: rabbitMQ
@@ -61,8 +61,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: .2
-          memory: 1g
+          cpus: 2
+          memory: 2g
    
   telemetry_service:
     build: ./telemetryService
@@ -84,8 +84,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: .2
-          memory: 1g
+          cpus: 2
+          memory: 2g
       
 secrets:
   influxdb-admin-username:

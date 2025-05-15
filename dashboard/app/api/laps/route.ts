@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
         |> filter(fn: (r) => r._measurement == "telemetry_ticks")
         |> keep(columns: ["lap_id"])
         |> unique(column: "lap_id")
+        |> sort(columns: ["lap_id"])
     `;
 
     const result = await queryApi.collectRows<LapRow>(query);

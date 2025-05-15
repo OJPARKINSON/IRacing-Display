@@ -189,7 +189,6 @@ function renderLoadingMessage(telemetry: any, error: string | null) {
 }
 
 const availableMetrics: string[] = [
-  "Lap",
   "LapDistPct",
   "Speed",
   "Throttle",
@@ -197,10 +196,6 @@ const availableMetrics: string[] = [
   "Gear",
   "RPM",
   "SteeringWheelAngle",
-  "VelocityX",
-  "VelocityY",
-  "Lat",
-  "Lon",
   "LapCurrentLapTime",
   "PlayerCarPosition",
   "FuelLevel",

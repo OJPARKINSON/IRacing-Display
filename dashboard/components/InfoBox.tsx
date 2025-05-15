@@ -133,7 +133,7 @@ export const TelemetryChart = ({
             onClick={handleChartClick}
             onMouseMove={handleMouseMove}
           >
-            <CartesianGrid strokeDasharray="1 1" fillOpacity={1} />
+            <CartesianGrid strokeDasharray="3 3" opacity={0.4} />
             <XAxis
               dataKey="SessionTime"
               label={{
