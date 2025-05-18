@@ -47,6 +47,7 @@ export default function TelemetryPage({ params }: Params) {
     telemetryFetcher
   );
 
+
   const { dataWithCoordinates, processError } = useTelemetryData(
     telemetry,
     trackPath,

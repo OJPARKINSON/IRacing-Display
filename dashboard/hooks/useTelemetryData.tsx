@@ -5,7 +5,7 @@ export function useTelemetryData(
   telemetry: any[] | undefined,
   trackPath: SVGPathElement | null,
   startFinishPosition: number,
-  svgContainerRef: RefObject<HTMLDivElement>,
+  svgContainerRef: RefObject<HTMLDivElement | null>,
   isClockwise: number = 0
 ) {
   const [processError, setProcessError] = useState<string | null>(null);

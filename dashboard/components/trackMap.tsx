@@ -19,7 +19,7 @@ import { useMapLayers } from "@/hooks/useMapLayers";
 import { TelemetryDataPoint } from "@/lib/types";
 
 interface TrackMapProps {
-  svgContainerRef: React.RefObject<HTMLDivElement>;
+  svgContainerRef: React.RefObject<HTMLDivElement | null>;
   dataWithCoordinates: TelemetryDataPoint[];
   selectedPointIndex: number;
   selectedLapPct: number;
