@@ -13,8 +13,8 @@ namespace TelemetryService.Services
 
         public InfluxService()
         {
-            string? url = Environment.GetEnvironmentVariable("INFLUX_URL");
-            string? token = System.IO.File.ReadAllText("/run/secrets/influxdb-admin-token").Trim();
+            string? url = Environment.GetEnvironmentVariable("INFLUXDB_URL");
+            string? token = Environment.GetEnvironmentVariable("INFLUXDB_TOKEN");
 
             if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
             {
@@ -33,8 +33,8 @@ namespace TelemetryService.Services
                 return;
             }
 
-            string? url = Environment.GetEnvironmentVariable("INFLUX_URL");
-            string? token = System.IO.File.ReadAllText("/run/secrets/influxdb-admin-token").Trim();
+            string? url = Environment.GetEnvironmentVariable("INFLUXDB_URL");
+            string? token = Environment.GetEnvironmentVariable("INFLUXDB_TOKEN");
 
             if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
             {
