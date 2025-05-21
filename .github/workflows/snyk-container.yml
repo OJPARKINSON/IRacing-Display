@@ -44,7 +44,7 @@ jobs:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       with:
         image: ghcr.io/ojparkinson/iracing-display:latest
-        args: --file=Dockerfile --sarif-file-output=snyk.sarif
+        args: --file=./dashboard/Dockerfile --sarif-file-output=snyk.sarif
     - name: Upload result to GitHub Code Scanning
       uses: github/codeql-action/upload-sarif@v3
       with:
@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build image
-        run: docker build ./telemetryService/telemetryService/ --file Dockerfile --tag iracing-display --label "runnumber=${GITHUB_RUN_ID}"
+        run: docker build ./dashboard/ --file Dockerfile --tag iracing-display --label "runnumber=${GITHUB_RUN_ID}"
       - name: Log in to registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Push image
