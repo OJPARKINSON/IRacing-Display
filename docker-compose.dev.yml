@@ -1,0 +1,137 @@
+services:
+  influxdb:
+    image: influxdb:2
+    container_name: influxdb
+    restart: always
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_ADMIN_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_ADMIN_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN}
+      DOCKER_INFLUXDB_INIT_ORG: myorg
+      DOCKER_INFLUXDB_INIT_BUCKET: telemetry
+    volumes:
+      - influxdb2-data:/var/lib/influxdb2
+      - influxdb2-config:/etc/influxdb2
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8086/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    networks:
+      - telemetry-network
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 1g
+
+  rabbitMQ:
+    container_name: rabbitMQ
+    image: rabbitmq:4.0-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - telemetry-network
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 2g
+
+  telemetry_service:
+    build: ./telemetryService/telemetryService
+    container_name: telemetry_service
+    restart: on-failure
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      rabbitMQ:
+        condition: service_healthy
+    networks:
+      - telemetry-network
+    environment:
+      INFLUXDB_URL: ${INFLUXDB_URL}
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      INFLUX_BUCKET: telemetry
+      INFLUX_ORG: myorg
+      DOTNET_ENVIRONMENT: Development
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 2g
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+  telemetry-dashboard:
+    build:
+      context: dashboard/
+      dockerfile: Dockerfile
+    container_name: telemetry-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      INFLUXDB_URL: ${INFLUXDB_URL}
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      INFLUXDB_ORG: myorg
+      INFLUXDB_BUCKET: telemetry
+      NODE_ENV: production
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    networks:
+      - telemetry-network
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 2g
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 120 --cleanup --label-enable
+    environment:
+      - WATCHTOWER_NOTIFICATIONS=shoutrrr
+      - WATCHTOWER_NOTIFICATION_URL=generic://?template=text
+      - TZ=Europe/London
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_DOCKER_TOKEN}
+    deploy:
+      resources:
+        limits:
+          cpus: 0.5
+          memory: 1g
+
+volumes:
+  influxdb2-data:
+  influxdb2-config:
+  rabbitmq-data:
+
+
+networks:
+  telemetry-network:
+    external: true
