@@ -186,4 +186,3 @@ keys/
 
 telemetryService/kafka/*
 ingest/go/kafka-data/*
-deploy.sh

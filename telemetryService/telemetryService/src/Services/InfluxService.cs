@@ -8,9 +8,7 @@ namespace TelemetryService.Services
     public class InfluxService : IDisposable
     {
         private readonly Dictionary<string, bool> _createdBuckets = new Dictionary<string, bool>();
-        private readonly InfluxDBClient _client;
-        private string? _organizationId;
-
+        private readonly InfluxDBClient? _client;
         public InfluxService()
         {
             string? url = Environment.GetEnvironmentVariable("INFLUXDB_URL");
@@ -25,7 +23,7 @@ namespace TelemetryService.Services
             _client = new InfluxDBClient(url, token);
         }
 
-        public async Task WriteTicks(List<TelemetryData> telData)
+        public async Task WriteTicks(List<TelemetryData>? telData)
         {
             if (telData == null || telData.Count == 0)
             {
@@ -44,7 +42,7 @@ namespace TelemetryService.Services
 
             string bucketName = $"telemetry_{telData[0].Session_id}";
 
-            if (!_createdBuckets.ContainsKey(bucketName))
+            if (!_createdBuckets.ContainsKey(bucketName) && _client != null)
             {
                 try
                 {
@@ -67,9 +65,7 @@ namespace TelemetryService.Services
 
                         var orgId = orgs.First().Id;
                         Console.WriteLine($"Using organization ID: {orgId}");
-
-                        var retentionRules = new BucketRetentionRules(BucketRetentionRules.TypeEnum.Expire, 0);
-
+                        
                         var bucket = await bucketsApi.CreateBucketAsync(bucketName, orgId);
                         Console.WriteLine($"Successfully created bucket: {bucket.Name} with ID: {bucket.Id}");
                     }
@@ -88,47 +84,51 @@ namespace TelemetryService.Services
 
             try
             {
-                using (var writeApi = _client.GetWriteApi())
+                if (_client != null)
                 {
-                    writeApi.EventHandler += HandleEvents;
-
-                    List<PointData> pointData = [];
-
-                    foreach (var tel in telData)
+                    using (var writeApi = _client.GetWriteApi())
                     {
-                        pointData.Add(
-                            PointData
-                                .Measurement("telemetry_ticks")
-                                .Tag("lap_id", tel.Lap_id)
-                                .Tag("session_id", tel.Session_id)
-                                .Tag("session_num", tel.Session_num)
-                                .Field("speed", tel.Speed)
-                                .Field("lap_dist_pct", tel.Lap_dist_pct)
-                                .Field("session_time", tel.Session_time)
-                                .Field("lap_current_lap_time", tel.Lap_current_lap_time)
-                                .Field("car_id", tel.Car_id)
-                                .Field("brake", tel.Brake)
-                                .Field("throttle", tel.Throttle)
-                                .Field("gear", tel.Gear)
-                                .Field("rpm", tel.Rpm)
-                                .Field("steering_wheel_angle", tel.Steering_wheel_angle)
-                                .Field("velocity_x", tel.Velocity_x)
-                                .Field("velocity_y", tel.Velocity_y)
-                                .Field("lat", tel.Lat)
-                                .Field("lon", tel.Lon)
-                                .Field("player_car_position", tel.Player_car_position)
-                                .Field("fuel_level", tel.Fuel_level)
-                                .Timestamp(DateTime.UtcNow.AddSeconds(-10), WritePrecision.Ns)
-                        );
+                        writeApi.EventHandler += HandleEvents;
+
+                        List<PointData> pointData = [];
+
+                        foreach (var tel in telData)
+                        {
+                            pointData.Add(
+                                PointData
+                                    .Measurement("telemetry_ticks")
+                                    .Tag("lap_id", tel.Lap_id)
+                                    .Tag("session_id", tel.Session_id)
+                                    .Tag("session_num", tel.Session_num)
+                                    .Field("speed", tel.Speed)
+                                    .Field("lap_dist_pct", tel.Lap_dist_pct)
+                                    .Field("session_time", tel.Session_time)
+                                    .Field("lap_current_lap_time", tel.Lap_current_lap_time)
+                                    .Field("car_id", tel.Car_id)
+                                    .Field("brake", tel.Brake)
+                                    .Field("throttle", tel.Throttle)
+                                    .Field("gear", tel.Gear)
+                                    .Field("rpm", tel.Rpm)
+                                    .Field("steering_wheel_angle", tel.Steering_wheel_angle)
+                                    .Field("velocity_x", tel.Velocity_x)
+                                    .Field("velocity_y", tel.Velocity_y)
+                                    .Field("lat", tel.Lat)
+                                    .Field("lon", tel.Lon)
+                                    .Field("player_car_position", tel.Player_car_position)
+                                    .Field("fuel_level", tel.Fuel_level)
+                                    .Timestamp(DateTime.UtcNow.AddSeconds(-10), WritePrecision.Ns)
+                            );
+                        }
+
+                        Console.WriteLine(
+                            $"Attempting to write {pointData.Count} points to bucket '{bucketName}' in org 'myorg'");
+                        writeApi.WritePoints(pointData, bucketName, "myorg");
+
+                        Console.WriteLine("Flushing data to InfluxDB...");
+                        writeApi.Flush();
+
+                        Console.WriteLine($"Data sent: {pointData.Count} points to bucket {bucketName}");
                     }
-
-                    Console.WriteLine($"Attempting to write {pointData.Count} points to bucket '{bucketName}' in org 'myorg'");
-                    writeApi.WritePoints(pointData, bucketName, "myorg");
-
-                    Console.WriteLine("Flushing data to InfluxDB...");
-                    writeApi.Flush();
-
-                    Console.WriteLine($"Data sent: {pointData.Count} points to bucket {bucketName}");
                 }
             }
             catch (Exception ex)
