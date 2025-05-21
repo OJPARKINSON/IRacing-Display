@@ -5,7 +5,7 @@ namespace TelemetryService.Services;
 
 internal class Telemetry
 {
-    private static readonly JsonSerializerSettings _jsonSettings = new()
+    private static readonly JsonSerializerSettings JsonSettings = new()
     {
         NullValueHandling = NullValueHandling.Ignore,
         MissingMemberHandling = MissingMemberHandling.Ignore
@@ -19,7 +19,7 @@ internal class Telemetry
         {
             if (input.TrimStart().StartsWith("[") && input.TrimEnd().EndsWith("]"))
             {
-                var dataArray = JsonConvert.DeserializeObject<List<TelemetryData>>(input, _jsonSettings);
+                var dataArray = JsonConvert.DeserializeObject<List<TelemetryData>>(input, JsonSettings);
                 if (dataArray != null && dataArray.Count > 0)
                 {
                     Console.WriteLine($"Successfully parsed {dataArray.Count} data points from JSON array");
@@ -34,7 +34,7 @@ internal class Telemetry
             foreach (var json in jsonArr)
                 try
                 {
-                    var data = JsonConvert.DeserializeObject<TelemetryData>(json, _jsonSettings);
+                    var data = JsonConvert.DeserializeObject<TelemetryData>(json, JsonSettings);
                     if (data != null) results.Add(data);
                 }
                 catch (Exception ex)

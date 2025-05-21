@@ -7,8 +7,8 @@ namespace TelemetryService.Services.Subscriber;
 
 internal class Subscriber
 {
-    private const int MAX_RETRY_ATTEMPTS = 10;
-    private const int RETRY_DELAY_MS = 5000;
+    private const int MaxRetryAttempts = 10;
+    private const int RetryDelayMs = 5000;
     private readonly InfluxService _influxService;
     private readonly Telemetry _telemetryService;
 
@@ -23,10 +23,10 @@ internal class Subscriber
         var retryCount = 0;
         var connected = false;
 
-        while (!connected && retryCount < MAX_RETRY_ATTEMPTS)
+        while (!connected && retryCount < MaxRetryAttempts)
             try
             {
-                Console.WriteLine($"Connecting to RabbitMQ (Attempt {retryCount + 1}/{MAX_RETRY_ATTEMPTS})...");
+                Console.WriteLine($"Connecting to RabbitMQ (Attempt {retryCount + 1}/{MaxRetryAttempts})...");
                 await ConnectAndSubscribeAsync();
                 connected = true;
             }
@@ -35,8 +35,8 @@ internal class Subscriber
                 retryCount++;
                 Console.WriteLine($"Failed to connect to RabbitMQ: {ex.Message}");
                 Console.WriteLine($"Exception details: {ex}");
-                Console.WriteLine($"Retrying in {RETRY_DELAY_MS / 1000} seconds...");
-                await Task.Delay(RETRY_DELAY_MS);
+                Console.WriteLine($"Retrying in {RetryDelayMs / 1000} seconds...");
+                await Task.Delay(RetryDelayMs);
             }
 
         if (!connected) Console.WriteLine("Failed to connect to RabbitMQ after multiple attempts. Exiting.");
@@ -44,18 +44,10 @@ internal class Subscriber
 
     private async Task ConnectAndSubscribeAsync()
     {
-        string? env = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
-        if (env == "Production")
-        {
-            env = "rabbitmq";
-        }
-        else
-        {
-            env = "localhost";
-        }
         var factory = new ConnectionFactory
         {
-            HostName = env,
+            // Potentially need to use localhost when running locally
+            HostName = "rabbitmq",
             Port = 5672,
             UserName = "guest",
             Password = "guest",
@@ -95,7 +87,7 @@ internal class Subscriber
         Console.WriteLine("Waiting for messages...");
 
         var consumer = new AsyncEventingBasicConsumer(channel);
-        consumer.ReceivedAsync += async (model, ea) =>
+        consumer.ReceivedAsync += async (_, ea) =>
         {
             try
             {
