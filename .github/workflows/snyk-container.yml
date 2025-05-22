@@ -1,4 +1,4 @@
-name: Snyk Container
+name: Build and Scan Containers
 
 on:
   push:
@@ -8,163 +8,62 @@ permissions:
   contents: read
   packages: write
   security-events: write
-  actions: read
 
 jobs:
-  build-and-scan-display:
-    permissions:
-      packages: write
-      contents: read
-      security-events: write
-      actions: read
+  display:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     
-    - name: Log in to registry
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+    - name: Build image
+      run: docker build -t iracing-display ./dashboard/
     
-    - name: Build Docker image
-      run: docker build -t iracing-display ./dashboard/ --label "runnumber=${GITHUB_RUN_ID}"
-    
-    - name: Run Snyk to check Docker image for vulnerabilities
+    - name: Scan with Snyk
       uses: snyk/actions/docker@master
       continue-on-error: true
       env:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       with:
         image: iracing-display
-        args: --file=./dashboard/Dockerfile --sarif-file-output=snyk.sarif --exclude-base-image-vulns --severity-threshold=medium
+        args: --sarif-file-output=snyk.sarif --severity-threshold=high
     
-    - name: Upload result to GitHub Code Scanning
+    - name: Upload scan results
       uses: github/codeql-action/upload-sarif@v3
-      if: always() && hashFiles('snyk.sarif') != ''
+      if: hashFiles('snyk.sarif') != ''
       with:
         sarif_file: snyk.sarif
     
-    - name: Save Docker image
-      run: docker save iracing-display -o /tmp/iracing-display.tar
-    
-    - name: Upload image artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: iracing-display-image
-        path: /tmp/iracing-display.tar
-        retention-days: 1
-
-  push-display:
-    runs-on: ubuntu-latest
-    needs: build-and-scan-display
-    permissions:
-      packages: write
-      contents: read
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Download image artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: iracing-display-image
-        path: /tmp
-    
-    - name: Load Docker image
-      run: docker load -i /tmp/iracing-display.tar
-    
-    - name: Log in to registry
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-    
-    - name: Tag and Push image
+    - name: Push to registry
       run: |
-        IMAGE_ID=ghcr.io/${{ github.repository_owner }}/iracing-display
-        IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        docker tag iracing-display ghcr.io/${{ github.repository_owner }}/iracing-display:latest
+        docker push ghcr.io/${{ github.repository_owner }}/iracing-display:latest
 
-        VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-
-        [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
-
-        [ "$VERSION" == "main" ] && VERSION=latest
-        echo IMAGE_ID=$IMAGE_ID
-        echo VERSION=$VERSION
-        docker tag iracing-display $IMAGE_ID:$VERSION
-        docker push $IMAGE_ID:$VERSION
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-and-scan-telemetryservice:
-    permissions:
-      packages: write
-      contents: read
-      security-events: write
-      actions: read
+  telemetry:
     runs-on: ubuntu-24.04-arm
     steps:
     - uses: actions/checkout@v4
     
-    - name: Log in to registry
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+    - name: Build image
+      run: docker build -t iracing-telemetryservice ./telemetryService/telemetryService/
     
-    - name: Build Docker image
-      run: docker build -t iracing-telemetryservice ./telemetryService/telemetryService/ --label "runnumber=${GITHUB_RUN_ID}"
-    
-    - name: Run Snyk to check Docker image for vulnerabilities
+    - name: Scan with Snyk
       uses: snyk/actions/docker@master
       continue-on-error: true
       env:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       with:
         image: iracing-telemetryservice
-        args: --file=./telemetryService/telemetryService/Dockerfile --sarif-file-output=snyk.sarif --exclude-base-image-vulns --severity-threshold=medium
-
-    - name: Upload result to GitHub Code Scanning
+        args: --sarif-file-output=snyk.sarif --severity-threshold=high
+    
+    - name: Upload scan results
       uses: github/codeql-action/upload-sarif@v3
-      if: always() && hashFiles('snyk.sarif') != ''
+      if: hashFiles('snyk.sarif') != ''
       with:
         sarif_file: snyk.sarif
     
-    - name: Save Docker image
-      run: docker save iracing-telemetryservice -o /tmp/iracing-telemetryservice.tar
-    
-    - name: Upload image artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: iracing-telemetryservice-image
-        path: /tmp/iracing-telemetryservice.tar
-        retention-days: 1
-
-  push-telemetryservice:
-    runs-on: ubuntu-24.04-arm
-    needs: build-and-scan-telemetryservice
-    permissions:
-      packages: write
-      contents: read
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Download image artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: iracing-telemetryservice-image
-        path: /tmp
-    
-    - name: Load Docker image
-      run: docker load -i /tmp/iracing-telemetryservice.tar
-    
-    - name: Log in to registry
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-    
-    - name: Tag and Push image
+    - name: Push to registry
       run: |
-        IMAGE_ID=ghcr.io/${{ github.repository_owner }}/iracing-telemetryservice
-        IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
-
-        VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-
-        [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
-
-        [ "$VERSION" == "main" ] && VERSION=latest
-        echo IMAGE_ID=$IMAGE_ID
-        echo VERSION=$VERSION
-        docker tag iracing-telemetryservice $IMAGE_ID:$VERSION
-        docker push $IMAGE_ID:$VERSION
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        docker tag iracing-telemetryservice ghcr.io/${{ github.repository_owner }}/iracing-telemetryservice:latest
+        docker push ghcr.io/${{ github.repository_owner }}/iracing-telemetryservice:latestfg
