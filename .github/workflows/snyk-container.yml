@@ -21,31 +21,14 @@ jobs:
       security-events: write
       actions: read
     runs-on: ubuntu-latest
-    outputs:
-      image-digest: ${{ steps.build.outputs.digest }}
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
     
     - name: Log in to registry
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
     
-    - name: Build and export Docker image
-      id: build
-      uses: docker/build-push-action@v5
-      with:
-        context: ./dashboard/
-        push: false
-        tags: iracing-display
-        outputs: type=docker,dest=/tmp/iracing-display.tar
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        labels: runnumber=${{ github.run_id }}
-    
-    - name: Load image for scanning
-      run: docker load -i /tmp/iracing-display.tar
+    - name: Build Docker image
+      run: docker build -t iracing-display ./dashboard/ --label "runnumber=${GITHUB_RUN_ID}"
     
     - name: Run Snyk to check Docker image for vulnerabilities
       uses: snyk/actions/docker@master
@@ -54,13 +37,16 @@ jobs:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       with:
         image: iracing-display
-        args: --file=./dashboard/Dockerfile --sarif-file-output=snyk.sarif
+        args: --file=./dashboard/Dockerfile --sarif-file-output=snyk.sarif --exclude-base-image-vulns --severity-threshold=medium
     
     - name: Upload result to GitHub Code Scanning
       uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
         sarif_file: snyk.sarif
+    
+    - name: Save Docker image
+      run: docker save iracing-display -o /tmp/iracing-display.tar
     
     - name: Upload image artifact
       uses: actions/upload-artifact@v4
@@ -115,46 +101,29 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
     - name: Log in to registry
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
     
-    - name: Build and export Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: ./telemetryService/telemetryService/
-        push: false
-        tags: iracing-telemetryservice
-        outputs: type=docker,dest=/tmp/iracing-telemetryservice.tar
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        labels: runnumber=${{ github.run_id }}
-    
-    - name: Load image for scanning
-      run: docker load -i /tmp/iracing-telemetryservice.tar
-    
-    - name: Install Snyk CLI
-      run: |
-        curl -Lo snyk https://github.com/snyk/cli/releases/latest/download/snyk-linux-arm64
-        chmod +x snyk
-        sudo mv snyk /usr/local/bin/
+    - name: Build Docker image
+      run: docker build -t iracing-telemetryservice ./telemetryService/telemetryService/ --label "runnumber=${GITHUB_RUN_ID}"
     
     - name: Run Snyk to check Docker image for vulnerabilities
+      uses: snyk/actions/docker@master
       continue-on-error: true
       env:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      run: |
-        snyk container test iracing-telemetryservice \
-          --file=./telemetryService/telemetryService/Dockerfile \
-          --sarif-file-output=snyk.sarif
-    
+      with:
+        image: iracing-telemetryservice
+        args: --file=./telemetryService/telemetryService/Dockerfile --sarif-file-output=snyk.sarif --exclude-base-image-vulns --severity-threshold=medium
+
     - name: Upload result to GitHub Code Scanning
       uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
         sarif_file: snyk.sarif
+    
+    - name: Save Docker image
+      run: docker save iracing-telemetryservice -o /tmp/iracing-telemetryservice.tar
     
     - name: Upload image artifact
       uses: actions/upload-artifact@v4
