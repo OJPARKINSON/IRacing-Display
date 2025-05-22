@@ -87,6 +87,8 @@ jobs:
         echo VERSION=$VERSION
         docker tag iracing-display $IMAGE_ID:$VERSION
         docker push $IMAGE_ID:$VERSION
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-and-scan-telemetryservice:
     permissions:
@@ -164,3 +166,5 @@ jobs:
         echo VERSION=$VERSION
         docker tag iracing-telemetryservice $IMAGE_ID:$VERSION
         docker push $IMAGE_ID:$VERSION
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
