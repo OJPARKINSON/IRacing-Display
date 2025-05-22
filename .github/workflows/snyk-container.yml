@@ -36,10 +36,12 @@ jobs:
     - name: Push to registry
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-        docker tag iracing-display ghcr.io/${{ github.repository_owner }}/iracing-display:latest
-        docker push ghcr.io/${{ github.repository_owner }}/iracing-display:latest
+        IMAGE_ID=ghcr.io/${{ github.repository_owner }}/iracing-display
+        IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+        docker tag iracing-display $IMAGE_ID:latest
+        docker push $IMAGE_ID:latest
 
-  telemetry:
+  telemetryService:
     runs-on: ubuntu-24.04-arm
     steps:
     - uses: actions/checkout@v4
@@ -65,5 +67,7 @@ jobs:
     - name: Push to registry
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-        docker tag iracing-telemetryservice ghcr.io/${{ github.repository_owner }}/iracing-telemetryservice:latest
-        docker push ghcr.io/${{ github.repository_owner }}/iracing-telemetryservice:latestfg
+        IMAGE_ID=ghcr.io/${{ github.repository_owner }}/iracing-telemetryservice
+        IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+        docker tag iracing-telemetryservice $IMAGE_ID:latest
+        docker push $IMAGE_ID:latest
