@@ -154,7 +154,7 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 
 		tickTime := sessionStartTime.Add(time.Duration(sessionTime * float64(time.Second)))
 
-		point := map[string]interface{}{
+		tick := map[string]interface{}{
 			"lap_id":               fmt.Sprintf("%d", lapID),
 			"session_id":           p.sessionID,
 			"session_num":          sessionNum,
@@ -164,7 +164,6 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			"lap_current_lap_time": getFloatValue(record, "LapCurrentLapTime"),
 			"car_id":               getIntValue(record, "PlayerCarIdx"),
 
-			// Other telemetry fields
 			"brake":                getFloatValue(record, "Brake"),
 			"throttle":             getFloatValue(record, "Throttle"),
 			"gear":                 getIntValue(record, "Gear"),
@@ -179,13 +178,13 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			"tick_time":            fmt.Sprintln(tickTime),
 		}
 
-		jsonData, err := json.Marshal(point)
+		jsonData, err := json.Marshal(tick)
 		if err != nil {
 			log.Printf("Error marshaling point to JSON: %v", err)
 		}
 
-		if point["session_num"] != "2" {
-			fmt.Println("session_num", point["session_num"])
+		if tick["session_num"] != "2" {
+			fmt.Println("session_num", tick["session_num"])
 		}
 
 		if p.bufferSize == 0 {
@@ -222,7 +221,6 @@ func (p *PubSub) flushBuffer() {
 	})
 
 	failOnError(err, "Failed to publish message")
-
 	log.Printf("Flushed %d points to RabbitMQ for session %s (%d points/sec)",
 		p.bufferSize, p.sessionID, len(p.pointsBuffer))
 
