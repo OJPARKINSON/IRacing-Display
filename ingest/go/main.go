@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -43,8 +44,15 @@ func main() {
 	}
 
 	for _, file := range files {
+		fileName := file.Name()
 
-		fmt.Println(telemetryFolder + file.Name())
+		if strings.Contains(fileName, ".ibt") != true {
+			continue
+		}
+
+		fmt.Println(fileName)
+
+		fmt.Println(telemetryFolder + fileName)
 
 		file, err := filepath.Glob(telemetryFolder + file.Name())
 		if err != nil {
