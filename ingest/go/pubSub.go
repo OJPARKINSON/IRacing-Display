@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	RabbitMqURL  = getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
-	MaxBatchSize = getEnvAsInt("MAX_BATCH_SIZE", 1000) // 100 kb
+	RabbitMqURL  = getEnv("RABBITMQ_URL", "amqp://guest:guest@192.168.1.205:5672/")
+	MaxBatchSize = getEnvAsInt("MAX_BATCH_SIZE", 1500) // 100 kb
 	BatchTimeout = getEnvAsDuration("BATCH_TIMEOUT", 10*time.Second)
 	MaxRetries   = getEnvAsInt("MAX_RETRIES", 3)
 	RetryDelay   = getEnvAsDuration("RETRY_DELAY", 500*time.Millisecond)
@@ -221,8 +221,6 @@ func (p *PubSub) flushBuffer() {
 	})
 
 	failOnError(err, "Failed to publish message")
-	log.Printf("Flushed %d points to RabbitMQ for session %s (%d points/sec)",
-		p.bufferSize, p.sessionID, len(p.pointsBuffer))
 
 	p.pointsBuffer = p.pointsBuffer[:0]
 	p.bufferSize = 0
