@@ -46,7 +46,7 @@ func main() {
 	for _, file := range files {
 		fileName := file.Name()
 
-		if strings.Contains(fileName, ".ibt") != true {
+		if !strings.Contains(fileName, ".ibt") {
 			continue
 		}
 
@@ -64,8 +64,6 @@ func main() {
 		}
 
 		log.Printf("Found %d files to process", len(files))
-
-		fmt.Println(files)
 
 		stubs, err := ibt.ParseStubs(file...)
 		if err != nil {
@@ -96,17 +94,13 @@ func main() {
 		fmt.Println("SubSessionID:", WeekendInfo.SubSessionID)
 		fmt.Println("TrackDisplayName:", WeekendInfo.TrackDisplayName)
 		fmt.Println("TrackID:", WeekendInfo.TrackID)
+		fmt.Println("TrackID:", WeekendInfo.TrackDisplayShortName)
+		fmt.Println("TrackID:", WeekendInfo.TrackDisplayName)
 
 		var wg sync.WaitGroup
 		processedGroups := 0
 
 		parallelism := runtime.NumCPU()
-		if pEnv := os.Getenv("PARALLEL_GROUPS"); pEnv != "" {
-			if p, err := fmt.Sscanf(pEnv, "%d", &parallelism); err != nil || p < 1 {
-				parallelism = 4
-			}
-		}
-		log.Printf("Available CPUs: %d, Using parallelism of: %d", runtime.NumCPU(), parallelism)
 
 		processors := make([]*loaderProcessor, 0, len(groups))
 
@@ -123,13 +117,10 @@ func main() {
 			processor := newLoaderProcessor(pubSub, groupNumber, batchSize)
 			processors = append(processors, processor)
 
-			log.Printf("Started %d processing goroutines", processedGroups)
 			wg.Add(1)
 			go func(g ibt.StubGroup, p *loaderProcessor, groupNum int) {
-				log.Printf("Group %d acquired semaphore slot, starting processing", groupNum)
 				defer wg.Done()
 
-				// Acquire semaphore slot
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
@@ -145,7 +136,6 @@ func main() {
 					return
 				}
 
-				// Close processor to flush remaining data
 				if err := p.Close(); err != nil {
 					log.Printf("Error closing processor for group %d: %v", groupNum, err)
 				}
@@ -167,6 +157,5 @@ func main() {
 		log.Printf("Total batches loaded: %d", pubSub.Loaded())
 	}
 
-	// The application has completed its work and will now exit
 	log.Println("All data has been processed and uploaded to RabbitMQ. Exiting application.")
 }
