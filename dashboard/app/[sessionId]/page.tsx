@@ -67,6 +67,11 @@ export default function TelemetryPage({ params }: Params) {
   if (svgError && !error) setError(svgError);
   if (processError && !error) setError(processError);
 
+  if (telemetry != undefined) {
+    console.log(telemetry[0].TrackName)
+    console.log(telemetry[0].SessionNum)
+  }
+
   return (
     <div className="p-4 bg-gray-900 text-white min-h-screen">
       <div className="flex justify-between">
@@ -80,8 +85,7 @@ export default function TelemetryPage({ params }: Params) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="col-span-1 lg:col-span-2 bg-gray-800 p-4 rounded-lg">
           <h2 className="text-xl font-semibold mb-2">
-            Monza Track Map & Racing Line
-          </h2>
+            test          </h2>
 
           <TrackMap
             svgContainerRef={svgContainerRef}
