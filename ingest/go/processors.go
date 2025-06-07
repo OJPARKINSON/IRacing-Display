@@ -65,7 +65,7 @@ func (l *loaderProcessor) Whitelist() []string {
 	return []string{
 		"Lap", "LapDistPct", "Speed", "Throttle", "Brake", "Gear", "RPM",
 		"SteeringWheelAngle", "VelocityX", "VelocityY", "Lat", "Lon", "SessionTime",
-		"LapCurrentLapTime", "PlayerCarPosition", "FuelLevel", "PlayerCarIdx",
+		"LapCurrentLapTime", "PlayerCarPosition", "FuelLevel", "PlayerCarIdx", "SessionNum",
 	}
 }
 
@@ -74,6 +74,10 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	if input["SessionNum"] != 2 {
+		fmt.Println("SessionNum", input["SessionNum"])
+	}
 
 	enrichedInput := make(map[string]interface{}, len(input)+2)
 	for k, v := range input {
@@ -87,6 +91,9 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 			sessionIndex = 2
 		}
 		enrichedInput["sessionID"] = session.SessionInfo.Sessions[sessionIndex].SessionNum
+
+		enrichedInput["trackDisplayShortName"] = session.WeekendInfo.TrackDisplayShortName
+		enrichedInput["trackID"] = session.WeekendInfo.TrackID
 	} else {
 		enrichedInput["sessionID"] = 0
 	}

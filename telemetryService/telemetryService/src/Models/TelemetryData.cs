@@ -2,10 +2,12 @@ namespace TelemetryService.Models;
 
 public class TelemetryData
 {
-    public int Car_id { get; set; }
+    public string Car_id { get; set; }
     public double Brake { get; set; }
     public double Fuel_level { get; set; }
     public int Gear { get; set; }
+    public string Track_name { get; set; }
+    public string Track_id { get; set; }
     public double Lap_current_lap_time { get; set; }
     public double Lap_dist_pct { get; set; }
     public string Lap_id { get; set; }

@@ -40,7 +40,7 @@ namespace TelemetryService.Services
                 return;
             }
 
-            string bucketName = $"telemetry_{telData[0].Session_id}";
+            string bucketName = $"telemetry_{telData[0].Track_name}";
 
             if (!_createdBuckets.ContainsKey(bucketName) && _client != null)
             {
@@ -65,7 +65,7 @@ namespace TelemetryService.Services
 
                         var orgId = orgs.First().Id;
                         Console.WriteLine($"Using organization ID: {orgId}");
-                        
+
                         var bucket = await bucketsApi.CreateBucketAsync(bucketName, orgId);
                         Console.WriteLine($"Successfully created bucket: {bucket.Name} with ID: {bucket.Id}");
                     }
@@ -100,11 +100,13 @@ namespace TelemetryService.Services
                                     .Tag("lap_id", tel.Lap_id)
                                     .Tag("session_id", tel.Session_id)
                                     .Tag("session_num", tel.Session_num)
+                                    .Tag("car_id", tel.Car_id)
+                                    .Tag("track_name", tel.Track_name)
+                                    .Tag("track_id", tel.Track_id)
                                     .Field("speed", tel.Speed)
                                     .Field("lap_dist_pct", tel.Lap_dist_pct)
                                     .Field("session_time", tel.Session_time)
                                     .Field("lap_current_lap_time", tel.Lap_current_lap_time)
-                                    .Field("car_id", tel.Car_id)
                                     .Field("brake", tel.Brake)
                                     .Field("throttle", tel.Throttle)
                                     .Field("gear", tel.Gear)

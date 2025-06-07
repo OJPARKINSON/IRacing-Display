@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	RabbitMqURL  = getEnv("RABBITMQ_URL", "amqp://guest:guest@192.168.1.205:5672/")
-	MaxBatchSize = getEnvAsInt("MAX_BATCH_SIZE", 1500) // 100 kb
+	RabbitMqURL  = getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/") // "amqp://guest:guest@192.168.1.205:5672/"
+	MaxBatchSize = getEnvAsInt("MAX_BATCH_SIZE", 1500)                          // 100 kb
 	BatchTimeout = getEnvAsDuration("BATCH_TIMEOUT", 10*time.Second)
 	MaxRetries   = getEnvAsInt("MAX_RETRIES", 3)
 	RetryDelay   = getEnvAsDuration("RETRY_DELAY", 500*time.Millisecond)
@@ -152,6 +152,21 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			sessionNum = fmt.Sprintf("%v", val)
 		}
 
+		trackName := ""
+		if val, ok := record["trackDisplayShortName"]; ok {
+			trackName = fmt.Sprintf("%v", val)
+		}
+
+		trackID := ""
+		if val, ok := record["trackID"]; ok {
+			trackID = fmt.Sprintf("%v", val)
+		}
+
+		carID := ""
+		if val, ok := record["PlayerCarIdx"]; ok {
+			carID = fmt.Sprintf("%v", val)
+		}
+
 		tickTime := sessionStartTime.Add(time.Duration(sessionTime * float64(time.Second)))
 
 		tick := map[string]interface{}{
@@ -162,7 +177,9 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			"lap_dist_pct":         getFloatValue(record, "LapDistPct"),
 			"session_time":         sessionTime,
 			"lap_current_lap_time": getFloatValue(record, "LapCurrentLapTime"),
-			"car_id":               getIntValue(record, "PlayerCarIdx"),
+			"car_id":               carID,
+			"track_name":           trackName,
+			"track_id":             trackID,
 
 			"brake":                getFloatValue(record, "Brake"),
 			"throttle":             getFloatValue(record, "Throttle"),
