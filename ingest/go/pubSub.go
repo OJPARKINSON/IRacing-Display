@@ -148,7 +148,7 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 		sessionTime := getFloatValue(record, "SessionTime")
 
 		sessionNum := ""
-		if val, ok := record["sessionID"]; ok {
+		if val, ok := record["SessionNum"]; ok {
 			sessionNum = fmt.Sprintf("%v", val)
 		}
 
@@ -171,27 +171,27 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 
 		tick := map[string]interface{}{
 			"lap_id":               fmt.Sprintf("%d", lapID),
-			"session_id":           p.sessionID,
-			"session_num":          sessionNum,
 			"speed":                getFloatValue(record, "Speed"),
 			"lap_dist_pct":         getFloatValue(record, "LapDistPct"),
+			"lap_current_lap_time": getFloatValue(record, "LapCurresntLapTime"),
+			"session_id":           p.sessionID,
+			"session_num":          sessionNum,
 			"session_time":         sessionTime,
-			"lap_current_lap_time": getFloatValue(record, "LapCurrentLapTime"),
 			"car_id":               carID,
 			"track_name":           trackName,
 			"track_id":             trackID,
 
-			"brake":                getFloatValue(record, "Brake"),
-			"throttle":             getFloatValue(record, "Throttle"),
-			"gear":                 getIntValue(record, "Gear"),
-			"rpm":                  getFloatValue(record, "RPM"),
 			"steering_wheel_angle": getFloatValue(record, "SteeringWheelAngle"),
+			"player_car_position":  getFloatValue(record, "PlayerCarPosition"),
 			"velocity_x":           getFloatValue(record, "VelocityX"),
 			"velocity_y":           getFloatValue(record, "VelocityY"),
+			"fuel_level":           getFloatValue(record, "FuelLevel"),
+			"throttle":             getFloatValue(record, "Throttle"),
+			"brake":                getFloatValue(record, "Brake"),
+			"rpm":                  getFloatValue(record, "RPM"),
 			"lat":                  getFloatValue(record, "Lat"),
 			"lon":                  getFloatValue(record, "Lon"),
-			"player_car_position":  getFloatValue(record, "PlayerCarPosition"),
-			"fuel_level":           getFloatValue(record, "FuelLevel"),
+			"gear":                 getIntValue(record, "Gear"),
 			"tick_time":            fmt.Sprintln(tickTime),
 		}
 

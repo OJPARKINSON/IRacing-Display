@@ -41,6 +41,8 @@ const processData = (data: TelemetryResponse) => {
     FuelLevel: d.fuel_level || 0,
     LapCurrentLapTime: d.lap_current_lap_time || 0,
     PlayerCarPosition: d.player_car_position || 0,
+    TrackName: d.track_name || "",
+    SessionNum: d.session_num || "",
   }));
 
   return processedData;

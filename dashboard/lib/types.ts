@@ -23,6 +23,8 @@ export interface TelemetryDataPoint {
   LapCurrentLapTime: number;
   PlayerCarPosition: number;
   coordinates?: [number, number]; // Added for storing calculated coordinates
+  TrackName: string,
+  SessionNum: string,
 }
 
 // Type for raw telemetry data from API
@@ -43,6 +45,8 @@ interface RawTelemetryData {
   fuel_level?: number;
   lap_current_lap_time?: number;
   player_car_position?: number;
+  track_name?: string;
+  session_num?: string;
 }
 
 // Type for telemetry response from API

@@ -140,8 +140,7 @@ func main() {
 					log.Printf("Error closing processor for group %d: %v", groupNum, err)
 				}
 
-				processTime := time.Since(startGroup)
-				log.Printf("Completed processing group %d in %v", groupNum, processTime)
+				log.Printf("Completed processing group %d in %v", groupNum, time.Since(startGroup))
 			}(group, processor, groupNumber)
 
 			processedGroups++
@@ -152,8 +151,7 @@ func main() {
 
 		ibt.CloseAllStubs(groups)
 
-		totalTime := time.Since(startTime)
-		log.Printf("Processing complete. Processed %d groups in %v", processedGroups, totalTime)
+		log.Printf("Processing complete. Processed %d groups in %v", processedGroups, time.Since(startTime))
 		log.Printf("Total batches loaded: %d", pubSub.Loaded())
 	}
 
