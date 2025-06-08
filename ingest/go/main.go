@@ -90,12 +90,9 @@ func main() {
 		log.Printf("Grouped telemetry data into %d groups", len(groups))
 
 		fmt.Println("SessionID:", WeekendInfo.SessionID)
-		fmt.Println("WeekendInfo:", WeekendInfo)
 		fmt.Println("SubSessionID:", WeekendInfo.SubSessionID)
 		fmt.Println("TrackDisplayName:", WeekendInfo.TrackDisplayName)
 		fmt.Println("TrackID:", WeekendInfo.TrackID)
-		fmt.Println("TrackID:", WeekendInfo.TrackDisplayShortName)
-		fmt.Println("TrackID:", WeekendInfo.TrackDisplayName)
 
 		var wg sync.WaitGroup
 		processedGroups := 0
