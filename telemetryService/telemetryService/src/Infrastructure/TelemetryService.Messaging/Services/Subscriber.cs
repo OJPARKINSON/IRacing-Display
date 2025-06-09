@@ -1,11 +1,14 @@
 using System.Text;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using TelemetryService.Models;
+using TelemetryService.Application.Services;
+using TelemetryService.Domain.Models;
+using TelemetryService.Persistence.Services;
 
-namespace TelemetryService.Services.Subscriber;
+namespace TelemetryService.Messaging.Services;
 
-internal class Subscriber
+public class Subscriber
+
 {
     private const int MaxRetryAttempts = 10;
     private const int RetryDelayMs = 5000;

@@ -14,4 +14,17 @@
         <PackageReference Include="RabbitMQ.Client" Version="7.1.2"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="tests\TelemetryService.Tests\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Content Include="src\Core\TelemetryService.Application\TelemetryService.Application.csproj" />
+      <Content Include="src\Core\TelemetryService.Domain\TelemetryService.Domain.csproj" />
+      <Content Include="src\Infrastructure\TelemetryService.Configuration\TelemetryService.Configuration.csproj" />
+      <Content Include="src\Infrastructure\TelemetryService.Messaging\TelemetryService.Messaging.csproj" />
+      <Content Include="src\Infrastructure\TelemetryService.Persistence\TelemetryService.Persistence.csproj" />
+      <Content Include="src\Presentation\TelemetryService.Worker\TelemetryService.Worker.csproj" />
+    </ItemGroup>
+
 </Project>
