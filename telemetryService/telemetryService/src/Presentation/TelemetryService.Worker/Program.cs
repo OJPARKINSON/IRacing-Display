@@ -1,8 +1,9 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using TelemetryService.Config;
-using TelemetryService.Services;
-using TelemetryService.Services.Subscriber;
+using TelemetryService.Application.Services;
+using TelemetryService.Configuration.Config;
+using TelemetryService.Persistence.Services;
+using TelemetryService.Messaging.Services;
 
 namespace TelemetryService;
 

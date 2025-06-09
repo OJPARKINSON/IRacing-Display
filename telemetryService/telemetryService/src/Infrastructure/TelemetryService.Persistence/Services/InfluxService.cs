@@ -1,9 +1,9 @@
 using InfluxDB.Client;
 using InfluxDB.Client.Api.Domain;
 using InfluxDB.Client.Writes;
-using TelemetryService.Models;
+using TelemetryService.Domain.Models;
 
-namespace TelemetryService.Services
+namespace TelemetryService.Persistence.Services
 {
     public class InfluxService : IDisposable
     {

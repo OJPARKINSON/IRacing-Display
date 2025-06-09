@@ -1,9 +1,9 @@
 using Newtonsoft.Json;
-using TelemetryService.Models;
+using TelemetryService.Domain.Models;
 
-namespace TelemetryService.Services;
+namespace TelemetryService.Application.Services;
 
-internal class Telemetry
+public class Telemetry
 {
     private static readonly JsonSerializerSettings JsonSettings = new()
     {
