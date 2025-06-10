@@ -107,7 +107,17 @@ publish/
 *.Publish.xml
 *.pubxml
 *.azurePubxml
-*.sln
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+bin/
+obj/
 
 # NuGet Packages Directory
 ## TODO: If you have NuGet Package Restore enabled, uncomment the next line
