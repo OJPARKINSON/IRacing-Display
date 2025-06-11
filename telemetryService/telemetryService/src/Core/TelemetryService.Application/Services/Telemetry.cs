@@ -15,6 +15,11 @@ public class Telemetry
     {
         var results = new List<TelemetryData>();
 
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return results;
+        }
+
         try
         {
             if (input.TrimStart().StartsWith("[") && input.TrimEnd().EndsWith("]"))
@@ -32,16 +37,21 @@ public class Telemetry
             results.Capacity = jsonArr.Count;
 
             foreach (var json in jsonArr)
+            {
                 try
                 {
                     var data = JsonConvert.DeserializeObject<TelemetryData>(json, JsonSettings);
-                    if (data != null) results.Add(data);
+                    if (data != null)
+                    {
+                        results.Add(data);
+                    }
                 }
-                catch (Exception ex)
+                catch (JsonException ex)
                 {
                     Console.WriteLine($"Error parsing JSON: {ex.Message}");
                     Console.WriteLine($"Problematic JSON: {json.Substring(0, Math.Min(100, json.Length))}...");
                 }
+            }
         }
         catch (Exception ex)
         {
@@ -55,16 +65,26 @@ public class Telemetry
     public List<string> SplitString(string input)
     {
         var jsonObjects = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return jsonObjects;
+        }
+
         jsonObjects.Capacity = Math.Max(10, input.Length / 500);
         var depth = 0;
         var startIndex = 0;
+        var trimmedInput = input.Trim();
 
-        if (input.TrimStart().StartsWith("[") && input.TrimEnd().EndsWith("]"))
-            input = input.TrimStart().Substring(1, input.TrimEnd().Length - 2);
-
-        for (var i = 0; i < input.Length; i++)
+        // Remove array brackets if present
+        if (trimmedInput.StartsWith("[") && trimmedInput.EndsWith("]"))
         {
-            var c = input[i];
+            trimmedInput = trimmedInput.Substring(1, trimmedInput.Length - 2);
+        }
+
+        for (var i = 0; i < trimmedInput.Length; i++)
+        {
+            var c = trimmedInput[i];
 
             if (c == '{')
             {
@@ -74,7 +94,10 @@ public class Telemetry
             else if (c == '}')
             {
                 depth--;
-                if (depth == 0) jsonObjects.Add(input.Substring(startIndex, i - startIndex + 1));
+                if (depth == 0)
+                {
+                    jsonObjects.Add(trimmedInput.Substring(startIndex, i - startIndex + 1));
+                }
             }
         }
 

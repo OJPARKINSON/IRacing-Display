@@ -7,10 +7,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -38,10 +36,9 @@ func main() {
 	telemetryFolder := os.Args[1]
 	log.Println("Processing IBT folder:", telemetryFolder)
 
-	files, err := os.ReadDir(telemetryFolder)
-	if err != nil {
-		log.Fatalf("Could not glob the given input files: %v", err)
-	}
+	directory := newDir(telemetryFolder)
+
+	files := directory.WatchDir()
 
 	for _, file := range files {
 		fileName := file.Name()
@@ -94,14 +91,7 @@ func main() {
 		fmt.Println("TrackDisplayName:", WeekendInfo.TrackDisplayName)
 		fmt.Println("TrackID:", WeekendInfo.TrackID)
 
-		var wg sync.WaitGroup
 		processedGroups := 0
-
-		parallelism := runtime.NumCPU()
-
-		processors := make([]*loaderProcessor, 0, len(groups))
-
-		sem := make(chan struct{}, parallelism)
 
 		for groupNumber, group := range groups {
 			batchSize := 100000
@@ -112,38 +102,28 @@ func main() {
 			}
 
 			processor := newLoaderProcessor(pubSub, groupNumber, batchSize)
-			processors = append(processors, processor)
 
-			wg.Add(1)
-			go func(g ibt.StubGroup, p *loaderProcessor, groupNum int) {
-				defer wg.Done()
+			log.Printf("Starting processing for group %d", groupNumber)
+			startGroup := time.Now()
 
-				sem <- struct{}{}
-				defer func() { <-sem }()
-
-				log.Printf("Starting processing for group %d", groupNum)
-				startGroup := time.Now()
-
-				if err := ibt.Process(ctx, g, p); err != nil {
-					if ctx.Err() == context.Canceled {
-						log.Printf("Processing of group %d was canceled", groupNum)
-					} else {
-						log.Printf("Failed to process telemetry for group %d: %v", groupNum, err)
-					}
-					return
+			if err := ibt.Process(ctx, group, processor); err != nil {
+				if ctx.Err() == context.Canceled {
+					log.Printf("Processing of group %d was canceled", groupNumber)
+				} else {
+					log.Printf("Failed to process telemetry for group %d: %v", groupNumber, err)
 				}
+				return
+			}
 
-				if err := p.Close(); err != nil {
-					log.Printf("Error closing processor for group %d: %v", groupNum, err)
-				}
+			if err := processor.Close(); err != nil {
+				log.Printf("Error closing processor for group %d: %v", groupNumber, err)
+			}
 
-				log.Printf("Completed processing group %d in %v", groupNum, time.Since(startGroup))
-			}(group, processor, groupNumber)
+			log.Printf("Completed processing group %d in %v", groupNumber, time.Since(startGroup))
 
 			processedGroups++
 		}
 
-		wg.Wait()
 		log.Printf("All %d groups have completed processing", processedGroups)
 
 		ibt.CloseAllStubs(groups)
