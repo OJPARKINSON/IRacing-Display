@@ -31,11 +31,15 @@ func (d *directory) WatchDir() []os.DirEntry {
 		log.Fatalf("Could not glob the given input files: %v", err)
 	}
 
+	filesToProcess := make([]os.DirEntry, 0)
+
 	for _, file := range files {
 		info, _ := file.Info()
-		info.ModTime()
+		if info.ModTime().Before(time.Now().Add(-(time.Minute * 10))) {
+			filesToProcess = append(filesToProcess, file)
+		}
 	}
 
 	d.lastScan = time.Now()
-	return files
+	return filesToProcess
 }

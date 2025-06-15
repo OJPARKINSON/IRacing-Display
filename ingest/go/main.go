@@ -40,6 +40,8 @@ func main() {
 
 	files := directory.WatchDir()
 
+	fmt.Println(files)
+
 	for _, file := range files {
 		fileName := file.Name()
 
@@ -91,8 +93,6 @@ func main() {
 		fmt.Println("TrackDisplayName:", WeekendInfo.TrackDisplayName)
 		fmt.Println("TrackID:", WeekendInfo.TrackID)
 
-		processedGroups := 0
-
 		for groupNumber, group := range groups {
 			batchSize := 100000
 			if bsEnv := os.Getenv("BATCH_SIZE"); bsEnv != "" {
@@ -121,14 +121,11 @@ func main() {
 
 			log.Printf("Completed processing group %d in %v", groupNumber, time.Since(startGroup))
 
-			processedGroups++
 		}
-
-		log.Printf("All %d groups have completed processing", processedGroups)
 
 		ibt.CloseAllStubs(groups)
 
-		log.Printf("Processing complete. Processed %d groups in %v", processedGroups, time.Since(startTime))
+		log.Printf("Processing complete. Processed in %v", time.Since(startTime))
 		log.Printf("Total batches loaded: %d", pubSub.Loaded())
 	}
 
