@@ -8,18 +8,17 @@ import VectorSource from "ol/source/Vector";
 import { Style, Stroke, Circle, Fill, Text } from "ol/style";
 import { DragPan, MouseWheelZoom } from "ol/interaction";
 import { defaults as defaultControls } from "ol/control";
-import Projection from "ol/proj/Projection";
-import { getCenter } from "ol/extent";
+import { fromLonLat, transform } from "ol/proj";
 import Feature from "ol/Feature";
-import { LineString, Point } from "ol/geom";
-import ImageLayer from "ol/layer/Image";
-import ImageStatic from "ol/source/ImageStatic";
+import { LineString, Point, Polygon } from "ol/geom";
+import TileLayer from "ol/layer/Tile";
+import OSM from "ol/source/OSM";
+import { getCenter } from "ol/extent";
 import "ol/ol.css";
 import { useMapLayers } from "@/hooks/useMapLayers";
 import { TelemetryDataPoint } from "@/lib/types";
 
 interface TrackMapProps {
-  svgContainerRef: React.RefObject<HTMLDivElement | null>;
   dataWithCoordinates: TelemetryDataPoint[];
   selectedPointIndex: number;
   selectedLapPct: number;
@@ -27,15 +26,14 @@ interface TrackMapProps {
   getTrackDisplayPoint: () => TelemetryDataPoint | null;
 }
 
-export default function TrackMap({
-  svgContainerRef,
+export default function GPSTrackMap({
   dataWithCoordinates,
   selectedPointIndex,
   isScrubbing,
-  getTrackDisplayPoint,
 }: TrackMapProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const [mapInitialized, setMapInitialized] = useState<boolean>(false);
+  const [trackBounds, setTrackBounds] = useState<any>(null);
   const olMapRef = useRef<Map | null>(null);
 
   // Custom hook for map layers and sources
@@ -46,23 +44,11 @@ export default function TrackMap({
     hoverMarkerSourceRef,
   } = useMapLayers();
 
-  // Initialize OpenLayers map
+  // Initialize OpenLayers map with GPS coordinates
   useEffect(() => {
     if (mapInitialized || !mapContainerRef.current) return;
 
-    // Initialize map function
     const initializeMap = (): void => {
-      // SVG dimensions
-      const svgWidth = 1556;
-      const svgHeight = 783;
-      const extent = [0, 0, svgWidth, svgHeight];
-
-      const projection = new Projection({
-        code: "svg-pixels",
-        units: "pixels",
-        extent: extent,
-      });
-
       // Create sources
       const racingLineSource = new VectorSource();
       racingLineSourceRef.current = racingLineSource;
@@ -76,46 +62,61 @@ export default function TrackMap({
       const selectedMarkerSource = new VectorSource();
       selectedMarkerSourceRef.current = selectedMarkerSource;
 
+      // Track boundaries source (for OpenStreetMap data)
+      const trackBoundariesSource = new VectorSource();
+
       // Create layers
+      const osmLayer = new TileLayer({
+        source: new OSM(),
+      });
+
+      const trackBoundariesLayer = new VectorLayer({
+        source: trackBoundariesSource,
+        style: new Style({
+          fill: new Fill({
+            color: "rgba(128, 128, 128, 0.2)",
+          }),
+          stroke: new Stroke({
+            color: "#808080",
+            width: 2,
+          }),
+        }),
+        zIndex: 1,
+      });
+
       const racingLineLayer = new VectorLayer({
         source: racingLineSource,
         style: new Style({
           stroke: new Stroke({
-            color: "#f56565",
-            width: 3,
+            color: "#ff0000",
+            width: 4,
           }),
         }),
+        zIndex: 10,
       });
 
       const carPositionLayer = new VectorLayer({
         source: carPositionSource,
         style: new Style({
           image: new Circle({
-            radius: 6,
+            radius: 8,
             fill: new Fill({
               color: "#00ff00",
             }),
-          }),
-        }),
-      });
-
-      const hoverMarkerLayer = new VectorLayer({
-        source: hoverMarkerSource,
-        style: new Style({
-          image: new Circle({
-            radius: 6,
-            fill: new Fill({
-              color: "#ffff00",
+            stroke: new Stroke({
+              color: "#000000",
+              width: 2,
             }),
           }),
         }),
+        zIndex: 15,
       });
 
       const selectedMarkerLayer = new VectorLayer({
         source: selectedMarkerSource,
         style: new Style({
           image: new Circle({
-            radius: 8,
+            radius: 10,
             fill: new Fill({
               color: "#00ffff",
             }),
@@ -125,44 +126,25 @@ export default function TrackMap({
             }),
           }),
         }),
-        zIndex: 100,
-      });
-
-      // Create track image source
-      const trackImageSource = new ImageStatic({
-        url: "http://localhost:3000/track-monza.svg",
-        projection: projection,
-        imageExtent: extent,
-      });
-
-      const trackLayer = new ImageLayer({
-        source: trackImageSource,
+        zIndex: 20,
       });
 
       // Create the map
       const map = new Map({
         target: mapContainerRef.current!,
         layers: [
-          trackLayer,
+          osmLayer,
+          trackBoundariesLayer,
           racingLineLayer,
           carPositionLayer,
-          hoverMarkerLayer,
           selectedMarkerLayer,
         ],
-        controls: defaultControls({ zoom: false, rotate: false }),
+        controls: defaultControls({ zoom: true, rotate: false }),
         view: new View({
-          projection: projection,
-          center: getCenter(extent),
-          zoom: 2,
-          rotation: 0,
-          maxZoom: 8,
-          minZoom: 1,
-          extent: [
-            -svgWidth * 0.5,
-            -svgHeight * 0.5,
-            svgWidth * 1.5,
-            svgHeight * 1.5,
-          ],
+          center: fromLonLat([9.2808, 45.6162]), // Monza coordinates
+          zoom: 15,
+          maxZoom: 20,
+          minZoom: 10,
         }),
       });
 
@@ -171,6 +153,10 @@ export default function TrackMap({
       map.addInteraction(new MouseWheelZoom());
 
       olMapRef.current = map;
+
+      // Load track boundaries from OpenStreetMap
+      loadTrackBoundaries(trackBoundariesSource);
+
       setMapInitialized(true);
     };
 
@@ -187,14 +173,86 @@ export default function TrackMap({
         hoverMarkerSourceRef.current = null;
       }
     };
-  }, [
-    racingLineSourceRef,
-    carPositionSourceRef,
-    selectedMarkerSourceRef,
-    hoverMarkerSourceRef,
-  ]);
+  }, [racingLineSourceRef, carPositionSourceRef, selectedMarkerSourceRef, hoverMarkerSourceRef]);
 
-  // Update racing line and car position when data changes
+  // Load track boundaries from OpenStreetMap using Overpass API
+  const loadTrackBoundaries = async (trackBoundariesSource: VectorSource) => {
+    try {
+      // Overpass API query for Monza race track
+      const overpassQuery = `
+        [out:json][timeout:25];
+        (
+          way["sport"="motor"]["name"~"Monza",i];
+          way["motorsport"="yes"]["name"~"Monza",i];
+          way["highway"="raceway"]["name"~"Monza",i];
+          relation["sport"="motor"]["name"~"Monza",i];
+        );
+        out geom;
+      `;
+
+      const response = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: overpassQuery,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // Process the track data
+        data.elements.forEach((element: any) => {
+          if (element.type === 'way' && element.geometry) {
+            const coordinates = element.geometry.map((node: any) =>
+              fromLonLat([node.lon, node.lat])
+            );
+
+            if (coordinates.length > 2) {
+              const trackFeature = new Feature({
+                geometry: new Polygon([coordinates]),
+              });
+              trackBoundariesSource.addFeature(trackFeature);
+            }
+          }
+        });
+
+        console.log('Track boundaries loaded from OpenStreetMap');
+      }
+    } catch (error) {
+      console.warn('Could not load track boundaries from OpenStreetMap:', error);
+      // Fallback: create approximate track boundaries based on telemetry data
+      createFallbackTrackBoundaries(trackBoundariesSource);
+    }
+  };
+
+  // Create approximate track boundaries based on telemetry data
+  const createFallbackTrackBoundaries = (trackBoundariesSource: VectorSource) => {
+    if (dataWithCoordinates.length === 0) return;
+
+    try {
+      // Convert GPS coordinates to map projection
+      const trackPoints = dataWithCoordinates
+        .filter(point => point.Lat && point.Lon)
+        .map(point => fromLonLat([point.Lon, point.Lat]));
+
+      if (trackPoints.length > 3) {
+        // Create a buffer around the racing line to approximate track boundaries
+        const bufferDistance = 50; // meters
+
+        // Simple approach: create inner and outer boundaries
+        const outerBoundary = trackPoints.map(([x, y]) => [x + bufferDistance, y + bufferDistance]);
+        const innerBoundary = trackPoints.map(([x, y]) => [x - bufferDistance, y - bufferDistance]);
+
+        const trackBoundary = new Feature({
+          geometry: new Polygon([outerBoundary]),
+        });
+
+        trackBoundariesSource.addFeature(trackBoundary);
+      }
+    } catch (error) {
+      console.error('Error creating fallback track boundaries:', error);
+    }
+  };
+
+  // Update racing line with GPS coordinates
   useEffect(() => {
     if (
       !mapInitialized ||
@@ -210,102 +268,86 @@ export default function TrackMap({
     carPositionSourceRef.current.clear();
 
     try {
-      // Add a special style for corner points to make the racing line more accurate
-      const lineStyle = new Style({
-        stroke: new Stroke({
-          color: "#f56565",
-          width: 3,
-        }),
-      });
+      // Filter points with valid GPS coordinates
+      const validGPSPoints = dataWithCoordinates.filter(
+        point => point.Lat && point.Lon && point.Lat !== 0 && point.Lon !== 0
+      );
 
-      // Add different visual appearance for corners vs straights
-      const cornerStyle = new Style({
-        stroke: new Stroke({
-          color: "#f56565",
-          width: 4,
-        }),
-      });
+      if (validGPSPoints.length === 0) {
+        console.warn('No valid GPS coordinates found in telemetry data');
+        return;
+      }
+
+      // Convert GPS coordinates to map projection
+      const lineCoordinates = validGPSPoints.map(point =>
+        fromLonLat([point.Lon, point.Lat])
+      );
 
       // Create the racing line
-      const lineCoordinates = dataWithCoordinates
-        .filter((point) => point.coordinates)
-        .map((point) => point.coordinates as [number, number]);
+      const lineFeature = new Feature({
+        geometry: new LineString(lineCoordinates),
+      });
 
-      if (lineCoordinates.length > 0) {
-        const lineFeature = new Feature({
-          geometry: new LineString(lineCoordinates),
+      // Style based on speed
+      const speedGradientStyle = createSpeedGradientStyle(validGPSPoints);
+      lineFeature.setStyle(speedGradientStyle);
+
+      racingLineSourceRef.current.addFeature(lineFeature);
+
+      // Add speed-based segments for better visualization
+      for (let i = 0; i < validGPSPoints.length - 1; i++) {
+        const point = validGPSPoints[i];
+        const nextPoint = validGPSPoints[i + 1];
+
+        const segmentCoords = [
+          fromLonLat([point.Lon, point.Lat]),
+          fromLonLat([nextPoint.Lon, nextPoint.Lat])
+        ];
+
+        const segmentFeature = new Feature({
+          geometry: new LineString(segmentCoords),
         });
 
-        // Apply the default line style
-        lineFeature.setStyle(lineStyle);
-        racingLineSourceRef.current.addFeature(lineFeature);
+        // Color based on speed
+        const speedColor = getSpeedColor(point.Speed);
+        segmentFeature.setStyle(new Style({
+          stroke: new Stroke({
+            color: speedColor,
+            width: 6,
+          }),
+        }));
 
-        // Create separate features for corner segments for better visualization
-        dataWithCoordinates.forEach((point, index) => {
-          if (index > 0 && index < dataWithCoordinates.length - 1) {
-            const prevPoint = dataWithCoordinates[index - 1];
-            const cornerSegment = new Feature({
-              geometry: new LineString([
-                prevPoint.coordinates as [number, number],
-                point.coordinates as [number, number],
-              ]),
-            });
+        racingLineSourceRef.current.addFeature(segmentFeature);
+      }
 
-            cornerSegment.setStyle(cornerStyle);
-            racingLineSourceRef.current!.addFeature(cornerSegment);
-          }
+      // Add car position at start
+      const startPoint = validGPSPoints[0];
+      if (startPoint) {
+        const carFeature = new Feature({
+          geometry: new Point(fromLonLat([startPoint.Lon, startPoint.Lat])),
         });
 
-        // Add the car feature at the start point
-        const startPoints = dataWithCoordinates.filter((p) => p.LapDistPct < 1);
-        const carPoint =
-          startPoints.length > 0 ? startPoints[0] : dataWithCoordinates[0];
+        carPositionSourceRef.current.addFeature(carFeature);
+      }
 
-        if (carPoint.coordinates) {
-          const carFeature = new Feature({
-            geometry: new Point(carPoint.coordinates),
+      // Fit view to racing line
+      if (!isScrubbing) {
+        const geometry = lineFeature.getGeometry();
+        if (geometry) {
+          olMapRef.current.getView().fit(geometry.getExtent(), {
+            padding: [100, 100, 100, 100],
+            duration: 1000,
+            maxZoom: 18,
           });
-
-          carFeature.setStyle(
-            new Style({
-              image: new Circle({
-                radius: 8,
-                fill: new Fill({
-                  color: "#00ff00",
-                }),
-                stroke: new Stroke({
-                  color: "#000000",
-                  width: 2,
-                }),
-              }),
-            })
-          );
-
-          carPositionSourceRef.current.addFeature(carFeature);
-        }
-
-        // Fit to the racing line bounds when not scrubbing
-        if (!isScrubbing) {
-          const geo = lineFeature.getGeometry();
-          if (geo) {
-            olMapRef.current.getView().fit(geo.getExtent(), {
-              padding: [50, 50, 50, 50],
-              duration: 1000,
-            });
-          }
         }
       }
-    } catch (error) {
-      console.error("Error rendering racing line:", error);
-    }
-  }, [
-    dataWithCoordinates,
-    mapInitialized,
-    isScrubbing,
-    racingLineSourceRef,
-    carPositionSourceRef,
-  ]);
 
+    } catch (error) {
+      console.error("Error rendering GPS-based racing line:", error);
+    }
+  }, [dataWithCoordinates, mapInitialized, isScrubbing, racingLineSourceRef, carPositionSourceRef]);
+
+  // Update selected marker
   useEffect(() => {
     if (!selectedMarkerSourceRef.current || dataWithCoordinates.length === 0) {
       return;
@@ -318,53 +360,21 @@ export default function TrackMap({
       dataWithCoordinates.length - 1
     );
 
-    const selectedPoint = dataWithCoordinates[validIndex] as TelemetryDataPoint;
+    const selectedPoint = dataWithCoordinates[validIndex];
 
-    if (!selectedPoint) return;
+    if (selectedPoint && selectedPoint.Lat && selectedPoint.Lon) {
+      const markerCoords = fromLonLat([selectedPoint.Lon, selectedPoint.Lat]);
 
-    const lapDistPct = selectedPoint.LapDistPct;
-
-    const similarPoints = dataWithCoordinates.filter(
-      (p) => Math.abs(p.LapDistPct - lapDistPct) < 1.0
-    ) as TelemetryDataPoint[];
-
-    let pointToDisplay = selectedPoint;
-
-    if (similarPoints.length > 0) {
-      if (selectedPoint.Speed < 40) {
-        pointToDisplay = similarPoints.reduce(
-          (lowest, current) =>
-            current.Speed < lowest.Speed ? current : lowest,
-          similarPoints[0]
-        );
-      } else {
-        pointToDisplay = similarPoints.reduce(
-          (closest, current) =>
-            Math.abs(current.LapDistPct - lapDistPct) <
-              Math.abs(closest.LapDistPct - lapDistPct)
-              ? current
-              : closest,
-          similarPoints[0]
-        );
-      }
-    }
-
-    if (pointToDisplay && pointToDisplay.coordinates) {
       const markerFeature = new Feature({
-        geometry: new Point(pointToDisplay.coordinates),
+        geometry: new Point(markerCoords),
       });
 
-      let displayText = `${pointToDisplay.LapDistPct.toFixed(1)}% - ${pointToDisplay.Speed.toFixed(1)}kph`;
-
-      if (Math.abs(pointToDisplay.LapDistPct) < 0.5 ||
-        Math.abs(pointToDisplay.LapDistPct - 100) < 0.5) {
-        displayText = `Start/Finish - ${pointToDisplay.Speed.toFixed(1)}kph`;
-      }
+      const displayText = `${selectedPoint.LapDistPct.toFixed(1)}% - ${selectedPoint.Speed.toFixed(1)}kph`;
 
       markerFeature.setStyle(
         new Style({
           image: new Circle({
-            radius: 8,
+            radius: 10,
             fill: new Fill({
               color: "#00ffff",
             }),
@@ -375,14 +385,14 @@ export default function TrackMap({
           }),
           text: new Text({
             text: displayText,
-            offsetY: -15,
-            font: "12px sans-serif",
+            offsetY: -20,
+            font: "14px sans-serif",
             fill: new Fill({
               color: "#ffffff",
             }),
             stroke: new Stroke({
               color: "#000000",
-              width: 2,
+              width: 3,
             }),
           }),
         })
@@ -390,14 +400,46 @@ export default function TrackMap({
 
       selectedMarkerSourceRef.current.addFeature(markerFeature);
 
+      // Center map on selected point when scrubbing
       if (isScrubbing && olMapRef.current) {
         olMapRef.current.getView().animate({
-          center: pointToDisplay.coordinates,
-          duration: 340,
+          center: markerCoords,
+          duration: 300,
         });
       }
     }
   }, [selectedPointIndex, dataWithCoordinates, isScrubbing, selectedMarkerSourceRef]);
+
+  // Helper function to create speed gradient style
+  const createSpeedGradientStyle = (points: TelemetryDataPoint[]) => {
+    const speeds = points.map(p => p.Speed);
+    const minSpeed = Math.min(...speeds);
+    const maxSpeed = Math.max(...speeds);
+
+    return new Style({
+      stroke: new Stroke({
+        color: "#ff0000",
+        width: 4,
+      }),
+    });
+  };
+
+  // Helper function to get color based on speed
+  const getSpeedColor = (speed: number): string => {
+    // Normalize speed to 0-1 range (assuming max speed around 300 km/h)
+    const normalizedSpeed = Math.min(speed / 300, 1);
+
+    if (normalizedSpeed < 0.3) {
+      // Low speed - red
+      return "#ff0000";
+    } else if (normalizedSpeed < 0.6) {
+      // Medium speed - yellow
+      return "#ffff00";
+    } else {
+      // High speed - green
+      return "#00ff00";
+    }
+  };
 
   const handleZoomIn = (): void => {
     if (olMapRef.current) {
@@ -439,17 +481,21 @@ export default function TrackMap({
         </button>
       </div>
 
-      {/* Hidden SVG container for path calculations */}
-      <div
-        ref={svgContainerRef}
-        style={{
-          position: "absolute",
-          width: "0",
-          height: "0",
-          visibility: "hidden",
-          overflow: "hidden",
-        }}
-      />
+      {/* Legend */}
+      <div className="absolute top-2 right-2 z-10 bg-gray-700 bg-opacity-90 p-2 rounded text-white text-xs">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-4 h-1 bg-red-500"></div>
+          <span>Low Speed</span>
+        </div>
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-4 h-1 bg-yellow-500"></div>
+          <span>Medium Speed</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-1 bg-green-500"></div>
+          <span>High Speed</span>
+        </div>
+      </div>
 
       {/* Map container */}
       <div ref={mapContainerRef} className="w-full h-full" />

@@ -99,6 +99,8 @@ public class Subscriber
 
                 List<TelemetryData> telemetryData = _telemetryService.Parse(message);
 
+                // telemetryData[0].Track_name
+
                 await _influxService.WriteTicks(telemetryData);
                 Console.WriteLine($"Successfully processed {telemetryData.Count} telemetry points");
             }

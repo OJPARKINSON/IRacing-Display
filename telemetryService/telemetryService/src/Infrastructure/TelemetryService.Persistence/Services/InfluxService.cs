@@ -30,6 +30,29 @@ public class InfluxService : IDisposable
         _client?.Dispose();
     }
 
+    public async Task<bool> CheckIfAlreadyExists(string track, string sessionID)
+    {
+        if (_client == null)
+        {
+            Console.WriteLine("ERROR: InfluxDB client is not initialized. Check environment variables.");
+            return false;
+        }
+
+        var bucketsAPI = _client.GetBucketsApi();
+        
+        var bucket = bucketsAPI.FindBucketByNameAsync($"telemetry_{track}").GetAwaiter().GetResult();
+
+        if (bucket == null)
+        {
+            return false;
+        }
+
+        var queryApi = _client.GetQueryApi();
+    
+        // var result = queryApi.QueryAsync<string[]>()
+        return false;
+    }
+
     public async Task WriteTicks(List<TelemetryData>? telData)
     {
         if (telData == null || telData.Count == 0)
