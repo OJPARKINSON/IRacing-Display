@@ -1,3 +1,4 @@
+using CsvHelper;
 using InfluxDB.Client;
 using InfluxDB.Client.Api.Domain;
 using InfluxDB.Client.Writes;
@@ -30,7 +31,7 @@ public class InfluxService : IDisposable
         _client?.Dispose();
     }
 
-    public async Task<bool> CheckIfAlreadyExists(string track, string sessionID)
+    public bool CheckIfAlreadyExists(string track, string sessionID)
     {
         if (_client == null)
         {
@@ -48,8 +49,22 @@ public class InfluxService : IDisposable
         }
 
         var queryApi = _client.GetQueryApi();
-    
-        // var result = queryApi.QueryAsync<string[]>()
+
+        var results = queryApi.QueryAsync<string[]>(
+            $"  from(bucket: \"telemetry_{track}\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r._measurement == \"telemetry_ticks\")\n  |> keep(columns: [\"session_id\"])\n  |> distinct(column: \"session_id\")");
+
+        if (results == null)
+        {
+            return false;
+        } 
+        foreach (var result in results.Result)
+        {
+            Console.WriteLine(result);
+            if (result[1] == sessionID)
+            {
+                return true;
+            }
+        }
         return false;
     }
 
