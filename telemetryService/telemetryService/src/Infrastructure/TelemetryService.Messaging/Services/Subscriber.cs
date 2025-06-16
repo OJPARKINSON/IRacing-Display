@@ -99,10 +99,21 @@ public class Subscriber
 
                 List<TelemetryData> telemetryData = _telemetryService.Parse(message);
 
-                // telemetryData[0].Track_name
 
-                await _influxService.WriteTicks(telemetryData);
-                Console.WriteLine($"Successfully processed {telemetryData.Count} telemetry points");
+                bool alreadyExist =
+                    _influxService.CheckIfAlreadyExists(telemetryData[0].Track_name, telemetryData[0].Session_id);
+
+                if (!alreadyExist)
+                {
+                    await _influxService.WriteTicks(telemetryData);
+                    Console.WriteLine($"Successfully processed {telemetryData.Count} telemetry points");
+                }
+                else
+                {
+                    Console.WriteLine($"Session already existis");
+                }
+
+                
             }
             catch (Exception ex)
             {
