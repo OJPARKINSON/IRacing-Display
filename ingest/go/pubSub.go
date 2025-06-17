@@ -192,7 +192,7 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			"lat":                  getFloatValue(record, "Lat"),
 			"lon":                  getFloatValue(record, "Lon"),
 			"gear":                 getIntValue(record, "Gear"),
-			"tick_time":            fmt.Sprintln(tickTime),
+			"tick_time":            tickTime.UTC(),
 		}
 
 		jsonData, err := json.Marshal(tick)
