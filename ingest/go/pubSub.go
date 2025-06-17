@@ -25,6 +25,7 @@ type PubSub struct {
 	conn          *amqp.Connection
 	ch            *amqp.Channel
 	sessionID     string
+	sessionTime   time.Time
 	mu            sync.Mutex
 	batchesLoaded int
 	ctx           context.Context
@@ -42,7 +43,7 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func newPubSub(sessionId string) *PubSub {
+func newPubSub(sessionId string, sessionTime time.Time) *PubSub {
 	log.Printf("Connecting to RabbitMQ at %s", RabbitMqURL)
 
 	conn, err := amqp.Dial(RabbitMqURL)
@@ -79,6 +80,7 @@ func newPubSub(sessionId string) *PubSub {
 		conn:          conn,
 		ch:            ch,
 		sessionID:     sessionId,
+		sessionTime:   sessionTime,
 		ctx:           ctx,
 		cancel:        cancel,
 		errorCh:       make(chan error, 100),
@@ -141,8 +143,6 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 		return nil
 	}
 
-	sessionStartTime := time.Now().Add(-time.Duration(getFloatValue(data[0], "SessionTime") * float64(time.Second)))
-
 	for _, record := range data {
 		lapID := getIntValue(record, "Lap")
 		sessionTime := getFloatValue(record, "SessionTime")
@@ -167,7 +167,7 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			carID = fmt.Sprintf("%v", val)
 		}
 
-		tickTime := sessionStartTime.Add(time.Duration(sessionTime * float64(time.Second)))
+		tickTime := p.sessionTime.Add(time.Duration(sessionTime * float64(time.Second)))
 
 		tick := map[string]interface{}{
 			"lap_id":               fmt.Sprintf("%d", lapID),
@@ -198,10 +198,6 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 		jsonData, err := json.Marshal(tick)
 		if err != nil {
 			log.Printf("Error marshaling point to JSON: %v", err)
-		}
-
-		if tick["session_num"] != "2" {
-			fmt.Println("session_num", tick["session_num"])
 		}
 
 		if p.bufferSize == 0 {
