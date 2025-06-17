@@ -30,44 +30,7 @@ public class InfluxService : IDisposable
     {
         _client?.Dispose();
     }
-
-    public bool CheckIfAlreadyExists(string track, string sessionID)
-    {
-        if (_client == null)
-        {
-            Console.WriteLine("ERROR: InfluxDB client is not initialized. Check environment variables.");
-            return false;
-        }
-
-        var bucketsAPI = _client.GetBucketsApi();
-        
-        var bucket = bucketsAPI.FindBucketByNameAsync($"telemetry_{track}").GetAwaiter().GetResult();
-
-        if (bucket == null)
-        {
-            return false;
-        }
-
-        var queryApi = _client.GetQueryApi();
-
-        var results = queryApi.QueryAsync<string[]>(
-            $"  from(bucket: \"telemetry_{track}\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r._measurement == \"telemetry_ticks\")\n  |> keep(columns: [\"session_id\"])\n  |> distinct(column: \"session_id\")");
-
-        if (results == null)
-        {
-            return false;
-        } 
-        foreach (var result in results.Result)
-        {
-            Console.WriteLine(result);
-            if (result[1] == sessionID)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
+    
     public async Task WriteTicks(List<TelemetryData>? telData)
     {
         if (telData == null || telData.Count == 0)
@@ -159,7 +122,8 @@ public class InfluxService : IDisposable
                             .Field("lon", tel.Lon)
                             .Field("player_car_position", tel.Player_car_position)
                             .Field("fuel_level", tel.Fuel_level)
-                            .Timestamp(DateTime.UtcNow.AddSeconds(-10), WritePrecision.Ns)
+                            .Field("tick_time", tel.Tick_time)
+                            .Timestamp(DateTime.Parse(tel.Tick_time), WritePrecision.Ns)
                     );
                 }
 
