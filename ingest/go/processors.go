@@ -75,10 +75,6 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if input["SessionNum"] != 2 {
-		fmt.Println("SessionNum", input["SessionNum"])
-	}
-
 	enrichedInput := make(map[string]interface{}, len(input)+2)
 	for k, v := range input {
 		enrichedInput[k] = v

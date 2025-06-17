@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -49,7 +50,10 @@ func main() {
 			continue
 		}
 
-		fmt.Println(fileName)
+		sessionTime, err := parseFileName(file.Name())
+		if err != nil {
+			log.Fatalf("Failed to parse time: %v", err)
+		}
 
 		fmt.Println(telemetryFolder + fileName)
 
@@ -77,7 +81,7 @@ func main() {
 		headers := stubs[0].Headers()
 		WeekendInfo := headers.SessionInfo.WeekendInfo
 
-		pubSub := newPubSub(strconv.Itoa(WeekendInfo.SubSessionID))
+		pubSub := newPubSub(strconv.Itoa(WeekendInfo.SubSessionID), sessionTime)
 		defer func() {
 			log.Println("Closing RabbitMQ connection...")
 			if err := pubSub.Close(); err != nil {
@@ -130,4 +134,29 @@ func main() {
 	}
 
 	log.Println("All data has been processed and uploaded to RabbitMQ. Exiting application.")
+}
+
+func parseFileName(fileName string) (time.Time, error) {
+	regex := regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}`)
+
+	match := regex.FindString(fileName)
+	if match == "" {
+		return time.Time{}, fmt.Errorf("no date pattern found in filename: %s", fileName)
+	}
+
+	parts := strings.Split(match, " ")
+	if len(parts) != 2 {
+		return time.Time{}, fmt.Errorf("invalid date format: %s", match)
+	}
+
+	timeStr := strings.ReplaceAll(parts[1], "-", ":")
+
+	rfc3339Str := parts[0] + "T" + timeStr + "Z"
+
+	parsedTime, err := time.Parse(time.RFC3339, rfc3339Str)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse time %s: %v", rfc3339Str, err)
+	}
+
+	return parsedTime, nil
 }
