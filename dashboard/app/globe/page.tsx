@@ -2,9 +2,18 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Target, Activity, MapPin, Clock, Gauge, Navigation, LucideIcon } from 'lucide-react';
-import Globe from 'react-globe.gl';
+import dynamic from 'next/dynamic';
+import tracks from '../../lib/tracks.json'
 
-// Type definitions
+const Globe = dynamic(() => import('react-globe.gl'), {
+    ssr: false,
+    loading: () => (
+        <div className="h-full flex items-center justify-center">
+            <div className="text-amber-400 font-mono">Loading Globe...</div>
+        </div>
+    )
+});
+
 interface Track {
     track_id: number;
     track_name: string;
@@ -15,9 +24,6 @@ interface Track {
     corners_per_lap: number;
     category: TrackCategory;
     track_type_text: string;
-    sessions: number;
-    lastSession: string;
-    bestLap: string;
 }
 
 interface TrackPoint extends Track {
@@ -27,7 +33,7 @@ interface TrackPoint extends Track {
     color: string;
 }
 
-type TrackCategory = 'road' | 'oval' | 'dirt' | 'street';
+type TrackCategory = 'road' | 'oval' | 'dirt' | 'street' | 'dirt_oval' | 'dirt_road';
 
 interface GeoJSONFeature {
     type: 'Feature';
@@ -56,95 +62,8 @@ interface TrackPopupProps {
     onClose: () => void;
 }
 
-// Your track data
-const mockTracks: Track[] = [
-    {
-        track_id: 1,
-        track_name: "Virginia International Raceway",
-        location: "Alton, Virginia, USA",
-        latitude: 36.560008,
-        longitude: -79.2048,
-        track_config_length: 4.07,
-        corners_per_lap: 26,
-        category: "road",
-        track_type_text: "Road Course",
-        sessions: 12,
-        lastSession: "2024-01-15",
-        bestLap: "1:42.567"
-    },
-    {
-        track_id: 2,
-        track_name: "Autodromo Nazionale Monza",
-        location: "Monza, Italy",
-        latitude: 45.6156,
-        longitude: 9.2811,
-        track_config_length: 5.793,
-        corners_per_lap: 11,
-        category: "road",
-        track_type_text: "Road Course",
-        sessions: 8,
-        lastSession: "2024-01-10",
-        bestLap: "1:21.046"
-    },
-    {
-        track_id: 3,
-        track_name: "Circuit de Spa-Francorchamps",
-        location: "Stavelot, Belgium",
-        latitude: 50.4372,
-        longitude: 5.9714,
-        track_config_length: 7.004,
-        corners_per_lap: 19,
-        category: "road",
-        track_type_text: "Road Course",
-        sessions: 15,
-        lastSession: "2024-01-20",
-        bestLap: "2:17.720"
-    },
-    {
-        track_id: 4,
-        track_name: "Nürburgring Grand Prix",
-        location: "Nürburg, Germany",
-        latitude: 50.3356,
-        longitude: 6.9475,
-        track_config_length: 5.148,
-        corners_per_lap: 15,
-        category: "road",
-        track_type_text: "Road Course",
-        sessions: 6,
-        lastSession: "2023-12-28",
-        bestLap: "1:35.234"
-    },
-    {
-        track_id: 5,
-        track_name: "Suzuka International Racing Course",
-        location: "Suzuka, Japan",
-        latitude: 34.8431,
-        longitude: 136.5407,
-        track_config_length: 5.807,
-        corners_per_lap: 18,
-        category: "road",
-        track_type_text: "Road Course",
-        sessions: 9,
-        lastSession: "2024-01-05",
-        bestLap: "1:32.983"
-    },
-    {
-        track_id: 6,
-        track_name: "Daytona International Speedway",
-        location: "Daytona Beach, Florida, USA",
-        latitude: 29.1869,
-        longitude: -81.0715,
-        track_config_length: 4.023,
-        corners_per_lap: 4,
-        category: "oval",
-        track_type_text: "Superspeedway",
-        sessions: 22,
-        lastSession: "2024-01-22",
-        bestLap: "0:46.221"
-    }
-];
+const mockTracks = tracks as Track[];
 
-// Get country data for polygons
 const getCountriesData = async (): Promise<CountriesData> => {
     try {
         const response = await fetch('https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson');
@@ -163,7 +82,9 @@ const getTrackTypeColor = (category: TrackCategory): string => {
         'road': '#f59e0b',
         'oval': '#ef4444',
         'dirt': '#a78bfa',
-        'street': '#10b981'
+        'street': '#10b981',
+        'dirt_oval': "#fff",
+        'dirt_road': "#b9109c"
     };
     return colors[category] || '#6b7280';
 };
@@ -182,8 +103,6 @@ const generateTooltipContent = (point: TrackPoint): string => {
             <div style="color: #f59e0b; font-weight: bold; margin-bottom: 8px;">${point.track_name}</div>
             <div style="color: #9ca3af; margin-bottom: 8px; font-size: 12px;">${point.location}</div>
             <div style="margin-bottom: 4px;"><span style="color: #6b7280;">Length:</span> <span style="color: #f59e0b;">${point.track_config_length}km</span></div>
-            <div style="margin-bottom: 4px;"><span style="color: #6b7280;">Sessions:</span> <span style="color: #10b981;">${point.sessions}</span></div>
-            <div><span style="color: #6b7280;">Best Lap:</span> <span style="color: #ef4444;">${point.bestLap}</span></div>
         </div>
     `;
 };
@@ -247,19 +166,6 @@ const TrackPopup: React.FC<TrackPopupProps> = ({ track, onClose }) => {
                     <div className="text-xs text-gray-400 font-mono mb-1">CORNERS</div>
                     <div className="text-amber-400 font-bold font-mono">{track.corners_per_lap}</div>
                 </div>
-                <div className="bg-gray-800/60 rounded p-2">
-                    <div className="text-xs text-gray-400 font-mono mb-1">SESSIONS</div>
-                    <div className="text-green-400 font-bold font-mono">{track.sessions}</div>
-                </div>
-                <div className="bg-gray-800/60 rounded p-2">
-                    <div className="text-xs text-gray-400 font-mono mb-1">BEST LAP</div>
-                    <div className="text-red-400 font-bold font-mono">{track.bestLap}</div>
-                </div>
-            </div>
-
-            <div className="flex items-center justify-between text-sm mb-3">
-                <span className="text-gray-400 font-mono">Last Session:</span>
-                <span className="text-white font-mono">{formatDate(track.lastSession)}</span>
             </div>
 
             <button className="w-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500 text-amber-400 py-2 px-4 rounded font-mono text-sm transition-colors">
@@ -274,79 +180,77 @@ const SpyDashboardGlobe: React.FC = () => {
     const [currentTime, setCurrentTime] = useState<Date>(new Date());
     const [countriesData, setCountriesData] = useState<CountriesData>({ features: [] });
     const [isAutoRotating, setIsAutoRotating] = useState<boolean>(true);
-    const [userInteracted, setUserInteracted] = useState<boolean>(false);
     const [dimensions, setDimensions] = useState({ width: 1200, height: 800 });
+    const [isMounted, setIsMounted] = useState(false);
     const globeRef = useRef<any>(null);
     const autoRotateRef = useRef<NodeJS.Timeout | null>(null);
     const lastInteractionRef = useRef<number>(0);
+    const rotationAngleRef = useRef<number>(0);
+    const isDraggingRef = useRef<boolean>(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // Handle window resize and set initial dimensions
     useEffect(() => {
+        if (!isMounted) return;
+
         const updateDimensions = () => {
-            if (typeof window !== 'undefined') {
-                setDimensions({
-                    width: window.innerWidth,
-                    height: window.innerHeight - 80
-                });
-            }
+            setDimensions({
+                width: window.innerWidth,
+                height: window.innerHeight - 80
+            });
         };
 
-        // Set initial dimensions
         updateDimensions();
 
-        // Add resize listener
-        if (typeof window !== 'undefined') {
-            window.addEventListener('resize', updateDimensions);
-            return () => window.removeEventListener('resize', updateDimensions);
-        }
-    }, []);
+        window.addEventListener('resize', updateDimensions);
+        return () => window.removeEventListener('resize', updateDimensions);
+    }, [isMounted]);
 
-    // Load countries data
     useEffect(() => {
         getCountriesData().then(setCountriesData);
     }, []);
 
-    // Format tracks for react-globe.gl
     const trackPoints: TrackPoint[] = mockTracks.map(track => ({
         ...track,
         lat: track.latitude,
         lng: track.longitude,
-        size: Math.min(Math.max(track.sessions * 0.3, 1), 5),
+        size: 5,
         color: getTrackTypeColor(track.category)
     }));
 
-    const totalSessions = mockTracks.reduce((sum, track) => sum + track.sessions, 0);
+    const totalSessions = mockTracks.reduce((sum) => sum, 0);
     const totalTracks = mockTracks.length;
     const totalDistance = mockTracks.reduce((sum, track) => sum + track.track_config_length, 0);
 
-    // Auto-rotation with user interaction detection
     useEffect(() => {
-        if (!globeRef.current) return;
+        if (!globeRef.current || !isAutoRotating || !isMounted) return;
 
         const globe = globeRef.current;
-        let angle = 0;
 
         const autoRotate = (): void => {
             const now = Date.now();
-            // Only auto-rotate if user hasn't interacted recently (within 5 seconds)
-            if (isAutoRotating && (now - lastInteractionRef.current > 5000)) {
-                angle += 0.2;
-                globe.pointOfView({
-                    lat: 0,
-                    lng: angle,
-                    altitude: 2.5
-                }, 0); // No transition duration for smooth rotation
+            if (!isDraggingRef.current && (now - lastInteractionRef.current > 3000)) {
+                rotationAngleRef.current += 0.3;
+                try {
+                    globe.pointOfView({
+                        lat: 0,
+                        lng: rotationAngleRef.current,
+                        altitude: 2.5
+                    }, 0);
+                } catch (error) {
+                    console.error("error setting auto rotate: ", error);
+                }
             }
         };
 
-        if (isAutoRotating) {
-            autoRotateRef.current = setInterval(autoRotate, 50);
-        }
+        autoRotateRef.current = setInterval(autoRotate, 100);
 
         return () => {
             if (autoRotateRef.current) {
@@ -354,14 +258,40 @@ const SpyDashboardGlobe: React.FC = () => {
                 autoRotateRef.current = null;
             }
         };
-    }, [isAutoRotating]);
+    }, [isAutoRotating, isMounted]);
 
-    // Handle user interactions
+    useEffect(() => {
+        if (!isMounted) return;
+
+        const handleMouseDown = () => {
+            isDraggingRef.current = true;
+            lastInteractionRef.current = Date.now();
+        };
+
+        const handleMouseUp = () => {
+            isDraggingRef.current = false;
+            lastInteractionRef.current = Date.now();
+        };
+
+        const handleMouseMove = () => {
+            if (isDraggingRef.current) {
+                lastInteractionRef.current = Date.now();
+            }
+        };
+
+        document.addEventListener('mousedown', handleMouseDown);
+        document.addEventListener('mouseup', handleMouseUp);
+        document.addEventListener('mousemove', handleMouseMove);
+
+        return () => {
+            document.removeEventListener('mousedown', handleMouseDown);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.removeEventListener('mousemove', handleMouseMove);
+        };
+    }, [isMounted]);
+
     const handleGlobeInteraction = (): void => {
         lastInteractionRef.current = Date.now();
-        if (!userInteracted) {
-            setUserInteracted(true);
-        }
     };
 
     const toggleAutoRotation = (): void => {
@@ -369,7 +299,6 @@ const SpyDashboardGlobe: React.FC = () => {
     };
 
     const handleTrackClick = (point: any): void => {
-        // Stop auto-rotation when user clicks on a track
         lastInteractionRef.current = Date.now();
         setSelectedTrack(point as Track);
     };
@@ -378,9 +307,16 @@ const SpyDashboardGlobe: React.FC = () => {
         setSelectedTrack(null);
     };
 
+    if (!isMounted) {
+        return (
+            <div className="h-screen bg-gray-900 text-white flex items-center justify-center">
+                <div className="text-amber-400 font-mono text-xl">Initializing Telemetry Command...</div>
+            </div>
+        );
+    }
+
     return (
         <div className="h-screen bg-gray-900 text-white overflow-hidden relative">
-            {/* Header */}
             <header className="absolute top-0 left-0 right-0 z-50 bg-gray-900/90 backdrop-blur-sm border-b border-gray-700/50">
                 <div className="flex items-center justify-between p-4">
                     <div className="flex items-center gap-4">
@@ -406,7 +342,6 @@ const SpyDashboardGlobe: React.FC = () => {
                 </div>
             </header>
 
-            {/* Stats Sidebar */}
             <aside className="absolute top-20 left-4 z-40 w-64 space-y-3">
                 <div className="bg-gray-900/80 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4">
                     <h2 className="text-lg font-bold text-amber-400 mb-3 font-mono">OPERATIONS STATUS</h2>
@@ -418,7 +353,6 @@ const SpyDashboardGlobe: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Legend */}
                 <div className="bg-gray-900/80 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4">
                     <h3 className="text-sm font-bold text-amber-400 mb-2 font-mono">TRACK CLASSIFICATION</h3>
                     <div className="space-y-2 text-xs font-mono">
@@ -441,7 +375,6 @@ const SpyDashboardGlobe: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Controls */}
                 <div className="bg-gray-900/80 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4">
                     <h3 className="text-sm font-bold text-amber-400 mb-2 font-mono">CONTROLS</h3>
                     <div className="space-y-2">
@@ -464,7 +397,6 @@ const SpyDashboardGlobe: React.FC = () => {
                 </div>
             </aside>
 
-            {/* Globe Container */}
             <main className="h-full pt-20">
                 <Globe
                     ref={globeRef}
@@ -472,20 +404,17 @@ const SpyDashboardGlobe: React.FC = () => {
                     height={dimensions.height}
                     backgroundColor="rgba(0,0,0,0)"
 
-                    // Globe styling
                     globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg"
                     showAtmosphere={true}
                     atmosphereColor="#f59e0b"
                     atmosphereAltitude={0.15}
 
-                    // Countries polygons
                     polygonsData={countriesData.features}
                     polygonCapColor={() => 'rgba(74, 85, 104, 0.4)'}
                     polygonSideColor={() => 'rgba(74, 85, 104, 0.1)'}
                     polygonStrokeColor={() => '#9ca3af'}
                     polygonAltitude={0.005}
 
-                    // Track points
                     pointsData={trackPoints}
                     pointLat="lat"
                     pointLng="lng"
@@ -494,7 +423,6 @@ const SpyDashboardGlobe: React.FC = () => {
                     pointRadius={0.1}
                     onPointClick={handleTrackClick}
 
-                    // Performance and interaction
                     enablePointerInteraction={true}
                     onGlobeReady={() => {
                         if (globeRef.current) {
@@ -502,13 +430,11 @@ const SpyDashboardGlobe: React.FC = () => {
                         }
                     }}
 
-                    // Add interaction handlers
                     onGlobeClick={handleGlobeInteraction}
-                    onPointHover={() => handleGlobeInteraction()}
+                    onPointHover={handleGlobeInteraction}
                 />
             </main>
 
-            {/* Track Popup */}
             {selectedTrack && (
                 <TrackPopup
                     track={selectedTrack}
@@ -516,7 +442,6 @@ const SpyDashboardGlobe: React.FC = () => {
                 />
             )}
 
-            {/* Spy Effects */}
             <div className="absolute inset-0 pointer-events-none z-30">
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-amber-500/5 to-transparent animate-pulse"></div>
             </div>
