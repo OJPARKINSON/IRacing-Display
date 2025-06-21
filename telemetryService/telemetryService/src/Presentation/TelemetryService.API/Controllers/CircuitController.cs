@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using TelemetryService.Application.Services;
-using TelemetryService.Domain.Models;
+using System.Text.Json;
 
 namespace TelemetryService.API.Controllers;
 
@@ -8,9 +7,27 @@ namespace TelemetryService.API.Controllers;
 [ApiController]
 public class CircuitController : ControllerBase
 {
-    [HttpGet]
-    public IActionResult GetCircuit()
+    private readonly IWebHostEnvironment _environment;
+
+    public CircuitController(IWebHostEnvironment environment)
     {
-        return Ok(new { success = true, data = "tracks" });
+        _environment = environment;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetCircuit()
+    {
+        var filePath = Path.Combine(_environment.ContentRootPath, "Data", "tracks.json");
+
+        if (!System.IO.File.Exists(filePath))
+        {
+            return NotFound(new { error = "Track file not found" });
+        }
+
+        var jsonString = await System.IO.File.ReadAllTextAsync(filePath);
+
+        var jsonData = JsonSerializer.Deserialize<object>(jsonString);
+
+        return Ok(jsonData);
     }
 }

@@ -17,4 +17,8 @@
         <ProjectReference Include="..\..\Infrastructure\TelemetryService.Configuration\TelemetryService.Configuration.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <EmbeddedResource Include="Data\tracks.json" />
+    </ItemGroup>
+
 </Project>
