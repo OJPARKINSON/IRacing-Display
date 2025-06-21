@@ -4,7 +4,7 @@ using InfluxDB.Client.Api.Domain;
 using InfluxDB.Client.Writes;
 using TelemetryService.Domain.Models;
 
-namespace TelemetryService.Persistence.Services;
+namespace TelemetryService.Infrastructure.Persistence;
 
 public class InfluxService : IDisposable
 {

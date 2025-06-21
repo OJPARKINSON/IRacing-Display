@@ -1,23 +1,19 @@
 using TelemetryService.Application.Services;
-using TelemetryService.Configuration.Config;
-using TelemetryService.Persistence.Services;
+using TelemetryService.Infrastructure.Configuration;
+using TelemetryService.Infrastructure.Persistence;
+using TelemetryService.Infrastructure.Messaging;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load environment variables
 LoadEnvironmentVariables();
 
-// Add services to the container
 builder.Services.AddControllers();
-
-// Add API documentation (Swagger)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "Telemetry Service API", Version = "v1" });
 });
 
-// Add CORS for development
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -28,28 +24,24 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Register your application services
 builder.Services.AddSingleton<Telemetry>();
 builder.Services.AddSingleton<InfluxService>();
+builder.Services.AddSingleton<Subscriber>();
 
-// Add logging
+builder.Services.AddHostedService<TelemetryBackgroundService>();
+
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
 var app = builder.Build();
 
-// Debug: Log all registered routes
-var logger = app.Services.GetRequiredService<ILogger<Program>>();
-logger.LogInformation("=== Registered Routes ===");
-
-// Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Telemetry Service API v1");
-        c.RoutePrefix = string.Empty; // Swagger UI at root
+        c.RoutePrefix = string.Empty;
     });
 }
 
@@ -58,9 +50,10 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-Console.WriteLine("🚀 Telemetry Service API is starting...");
+Console.WriteLine("🚀 Telemetry Service starting...");
+Console.WriteLine("✅ HTTP API endpoints enabled");
+Console.WriteLine("✅ Background RabbitMQ processing enabled");
 Console.WriteLine($"Environment: {app.Environment.EnvironmentName}");
-Console.WriteLine("Swagger UI available at: http://localhost:5000 (in development)");
 
 app.Run();
 
@@ -77,5 +70,31 @@ static void LoadEnvironmentVariables()
     else
     {
         Console.WriteLine("No .env file found. Using system environment variables.");
+    }
+}
+
+public class TelemetryBackgroundService : BackgroundService
+{
+    private readonly Subscriber _subscriber;
+    private readonly ILogger<TelemetryBackgroundService> _logger;
+
+    public TelemetryBackgroundService(Subscriber subscriber, ILogger<TelemetryBackgroundService> logger)
+    {
+        _subscriber = subscriber;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            _logger.LogInformation("🔄 Starting RabbitMQ subscriber...");
+            await _subscriber.SubscribeAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Error in RabbitMQ subscriber");
+            throw;
+        }
     }
 }
