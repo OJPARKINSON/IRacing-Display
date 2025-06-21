@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Core\TelemetryService.Application\TelemetryService.Application.csproj" />
+        <ProjectReference Include="..\..\Core\TelemetryService.Domain\TelemetryService.Domain.csproj" />
+        <ProjectReference Include="..\..\Infrastructure\TelemetryService.Persistence\TelemetryService.Persistence.csproj" />
+        <ProjectReference Include="..\..\Infrastructure\TelemetryService.Configuration\TelemetryService.Configuration.csproj" />
+    </ItemGroup>
+
+</Project>
