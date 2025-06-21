@@ -1,4 +1,4 @@
-namespace TelemetryService.Configuration.Config;
+namespace TelemetryService.Infrastructure.Configuration;
 
 public static class DotEnv
 {

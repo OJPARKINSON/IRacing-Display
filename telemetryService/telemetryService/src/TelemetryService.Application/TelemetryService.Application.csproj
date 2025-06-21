@@ -10,6 +10,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Core\TelemetryService.Domain\TelemetryService.Domain.csproj" />
+        <ProjectReference Include="..\TelemetryService.Domain\TelemetryService.Domain.csproj" />
     </ItemGroup>
 </Project>

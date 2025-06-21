@@ -3,9 +3,9 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using TelemetryService.Application.Services;
 using TelemetryService.Domain.Models;
-using TelemetryService.Persistence.Services;
+using TelemetryService.Infrastructure.Persistence;
 
-namespace TelemetryService.Messaging.Services;
+namespace TelemetryService.Infrastructure.Messaging;
 
 public class Subscriber
 
@@ -99,11 +99,11 @@ public class Subscriber
 
                 List<TelemetryData> telemetryData = _telemetryService.Parse(message);
 
-                
+
                 await _influxService.WriteTicks(telemetryData);
                 Console.WriteLine($"Successfully processed {telemetryData.Count} telemetry points");
 
-                
+
             }
             catch (Exception ex)
             {
