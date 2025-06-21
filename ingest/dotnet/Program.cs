@@ -13,8 +13,8 @@ namespace ingest
             var logger = LoggerFactory
                 .Create(builder => builder.AddConsole().AddSimpleConsole(o => o.SingleLine = true))
                 .CreateLogger("logger");
-            
-            
+
+
             Console.WriteLine("Press enter to exit.");
             Console.ReadLine();
 
