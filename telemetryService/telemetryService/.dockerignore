@@ -1,0 +1,16 @@
+**/.git
+**/bin
+**/obj
+**/.vs
+**/.vscode
+**/node_modules
+**/*.log
+**/.env
+**/Dockerfile*
+**/.dockerignore
+**/README.md
+**/*.md
+**/tests
+**/.gitignore
+**/coverage
+**/.nyc_output
