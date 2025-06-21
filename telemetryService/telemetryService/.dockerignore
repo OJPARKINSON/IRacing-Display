@@ -10,7 +10,6 @@
 **/.dockerignore
 **/README.md
 **/*.md
-**/tests
 **/.gitignore
 **/coverage
 **/.nyc_output
