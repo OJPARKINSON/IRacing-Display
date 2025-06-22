@@ -1,8 +1,6 @@
-
-
 using TelemetryService.Infrastructure.Messaging;
 
-namespace TelemetryService.Api.BackgroundServices;
+namespace TelemetryService.API.BackgroundServices; // Fixed: API not Api
 
 public class TelemetryBackgroundService : BackgroundService
 {
@@ -30,7 +28,6 @@ public class TelemetryBackgroundService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "❌ Fatal error in TelemetryBackgroundService");
-
             throw;
         }
     }

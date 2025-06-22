@@ -12,9 +12,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Core\TelemetryService.Application\TelemetryService.Application.csproj" />
-        <ProjectReference Include="..\..\Infrastructure\TelemetryService.Persistence\TelemetryService.Persistence.csproj" />
-        <ProjectReference Include="..\..\Infrastructure\TelemetryService.Messaging\TelemetryService.Messaging.csproj" />
-        <ProjectReference Include="..\..\Infrastructure\TelemetryService.Configuration\TelemetryService.Configuration.csproj" />
+        <ProjectReference Include="..\TelemetryService.Domain\TelemetryService.Domain.csproj" />
+        <ProjectReference Include="..\TelemetryService.Application\TelemetryService.Application.csproj" />
+        <ProjectReference Include="..\TelemetryService.Infrastructure\TelemetryService.Infrastructure.csproj" />
     </ItemGroup>
 </Project>

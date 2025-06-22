@@ -11,7 +11,7 @@ import {
 	LucideIcon,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import tracks from "../../lib/tracks.json";
+// import tracks from "../../lib/tracks.json";
 
 const Globe = dynamic(() => import("react-globe.gl"), {
 	ssr: false,
@@ -76,7 +76,7 @@ interface TrackPopupProps {
 	onClose: () => void;
 }
 
-const mockTracks = tracks as Track[];
+const mockTracks = [] as Track[];
 
 const getCountriesData = async (): Promise<CountriesData> => {
 	try {
@@ -444,11 +444,10 @@ const SpyDashboardGlobe: React.FC = () => {
 					<div className="space-y-2">
 						<button
 							onClick={toggleAutoRotation}
-							className={`w-full px-3 py-1 rounded text-xs font-mono border transition-colors ${
-								isAutoRotating
-									? "bg-amber-500/20 border-amber-500 text-amber-400"
-									: "bg-gray-700/50 border-gray-600 text-gray-400"
-							}`}
+							className={`w-full px-3 py-1 rounded text-xs font-mono border transition-colors ${isAutoRotating
+								? "bg-amber-500/20 border-amber-500 text-amber-400"
+								: "bg-gray-700/50 border-gray-600 text-gray-400"
+								}`}
 						>
 							{isAutoRotating ? "DISABLE AUTO-ROTATE" : "ENABLE AUTO-ROTATE"}
 						</button>
