@@ -69,6 +69,8 @@ services:
         condition: service_healthy
       rabbitMQ:
         condition: service_healthy
+    ports:
+      - "5000:5000"
     networks:
       - telemetry-network
     environment:
@@ -77,6 +79,9 @@ services:
       INFLUX_BUCKET: telemetry
       INFLUX_ORG: myorg
       DOTNET_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:5000
+      DOTNET_GCRetainVM: 1
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: true
     deploy:
       resources:
         limits:

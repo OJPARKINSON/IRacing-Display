@@ -44,6 +44,57 @@ export default function GPSTrackMap({
 		hoverMarkerSourceRef,
 	} = useMapLayers();
 
+	// Load track boundaries from OpenStreetMap using Overpass API
+	const loadTrackBoundaries = async (trackBoundariesSource: VectorSource) => {
+		try {
+			// Overpass API query for Monza race track
+			const overpassQuery = `
+        [out:json][timeout:25];
+        (
+          way["sport"="motor"]["name"~"Monza",i];
+          way["motorsport"="yes"]["name"~"Monza",i];
+          way["highway"="raceway"]["name"~"Monza",i];
+          relation["sport"="motor"]["name"~"Monza",i];
+        );
+        out geom;
+      `;
+
+			const response = await fetch("https://overpass-api.de/api/interpreter", {
+				method: "POST",
+				body: overpassQuery,
+			});
+
+			if (response.ok) {
+				const data = await response.json();
+
+				// Process the track data
+				data.elements.forEach((element: any) => {
+					if (element.type === "way" && element.geometry) {
+						const coordinates = element.geometry.map((node: any) =>
+							fromLonLat([node.lon, node.lat]),
+						);
+
+						if (coordinates.length > 2) {
+							const trackFeature = new Feature({
+								geometry: new Polygon([coordinates]),
+							});
+							trackBoundariesSource.addFeature(trackFeature);
+						}
+					}
+				});
+
+				console.log("Track boundaries loaded from OpenStreetMap");
+			}
+		} catch (error) {
+			console.warn(
+				"Could not load track boundaries from OpenStreetMap:",
+				error,
+			);
+			// Fallback: create approximate track boundaries based on telemetry data
+			createFallbackTrackBoundaries(trackBoundariesSource);
+		}
+	};
+
 	// Initialize OpenLayers map with GPS coordinates
 	useEffect(() => {
 		if (mapInitialized || !mapContainerRef.current) return;
@@ -178,58 +229,11 @@ export default function GPSTrackMap({
 		carPositionSourceRef,
 		selectedMarkerSourceRef,
 		hoverMarkerSourceRef,
+		mapInitialized,
+		loadTrackBoundaries,
 	]);
 
-	// Load track boundaries from OpenStreetMap using Overpass API
-	const loadTrackBoundaries = async (trackBoundariesSource: VectorSource) => {
-		try {
-			// Overpass API query for Monza race track
-			const overpassQuery = `
-        [out:json][timeout:25];
-        (
-          way["sport"="motor"]["name"~"Monza",i];
-          way["motorsport"="yes"]["name"~"Monza",i];
-          way["highway"="raceway"]["name"~"Monza",i];
-          relation["sport"="motor"]["name"~"Monza",i];
-        );
-        out geom;
-      `;
 
-			const response = await fetch("https://overpass-api.de/api/interpreter", {
-				method: "POST",
-				body: overpassQuery,
-			});
-
-			if (response.ok) {
-				const data = await response.json();
-
-				// Process the track data
-				data.elements.forEach((element: any) => {
-					if (element.type === "way" && element.geometry) {
-						const coordinates = element.geometry.map((node: any) =>
-							fromLonLat([node.lon, node.lat]),
-						);
-
-						if (coordinates.length > 2) {
-							const trackFeature = new Feature({
-								geometry: new Polygon([coordinates]),
-							});
-							trackBoundariesSource.addFeature(trackFeature);
-						}
-					}
-				});
-
-				console.log("Track boundaries loaded from OpenStreetMap");
-			}
-		} catch (error) {
-			console.warn(
-				"Could not load track boundaries from OpenStreetMap:",
-				error,
-			);
-			// Fallback: create approximate track boundaries based on telemetry data
-			createFallbackTrackBoundaries(trackBoundariesSource);
-		}
-	};
 
 	// Create approximate track boundaries based on telemetry data
 	const createFallbackTrackBoundaries = (

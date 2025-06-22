@@ -1,5 +1,8 @@
 .PHONY: restart logs
 
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
 restart:
 	@echo "🚀 Restarting Docker services..."
 	@docker-compose --file docker-compose.dev.yml down -v

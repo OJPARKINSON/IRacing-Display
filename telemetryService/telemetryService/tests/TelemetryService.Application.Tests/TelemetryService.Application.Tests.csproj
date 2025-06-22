@@ -17,7 +17,6 @@
         </PackageReference>
         <PackageReference Include="Moq" Version="4.20.69" />
         <PackageReference Include="FluentAssertions" Version="6.12.0" />
-        <!-- Use Microsoft.Extensions.Logging for creating test loggers -->
         <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
         <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
         <PackageReference Include="AutoFixture" Version="4.18.1" />
@@ -25,8 +24,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Core\TelemetryService.Application\TelemetryService.Application.csproj" />
-        <ProjectReference Include="..\..\src\Core\TelemetryService.Domain\TelemetryService.Domain.csproj" />
+        <ProjectReference Include="..\..\src\TelemetryService.Application\TelemetryService.Application.csproj" />
+        <ProjectReference Include="..\..\src\TelemetryService.Domain\TelemetryService.Domain.csproj" />
     </ItemGroup>
 
 </Project>

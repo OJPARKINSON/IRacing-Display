@@ -2,11 +2,13 @@ using TelemetryService.Application.Services;
 using TelemetryService.Infrastructure.Configuration;
 using TelemetryService.Infrastructure.Persistence;
 using TelemetryService.Infrastructure.Messaging;
+using TelemetryService.API.BackgroundServices; // Reference to your BackgroundService
 
 var builder = WebApplication.CreateBuilder(args);
 
 LoadEnvironmentVariables();
 
+// Add API services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -24,10 +26,12 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Register telemetry services
 builder.Services.AddSingleton<Telemetry>();
 builder.Services.AddSingleton<InfluxService>();
 builder.Services.AddSingleton<Subscriber>();
 
+// Add background service for RabbitMQ processing
 builder.Services.AddHostedService<TelemetryBackgroundService>();
 
 builder.Logging.ClearProviders();
@@ -35,6 +39,7 @@ builder.Logging.AddConsole();
 
 var app = builder.Build();
 
+// Configure HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -70,31 +75,5 @@ static void LoadEnvironmentVariables()
     else
     {
         Console.WriteLine("No .env file found. Using system environment variables.");
-    }
-}
-
-public class TelemetryBackgroundService : BackgroundService
-{
-    private readonly Subscriber _subscriber;
-    private readonly ILogger<TelemetryBackgroundService> _logger;
-
-    public TelemetryBackgroundService(Subscriber subscriber, ILogger<TelemetryBackgroundService> logger)
-    {
-        _subscriber = subscriber;
-        _logger = logger;
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        try
-        {
-            _logger.LogInformation("🔄 Starting RabbitMQ subscriber...");
-            await _subscriber.SubscribeAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "❌ Error in RabbitMQ subscriber");
-            throw;
-        }
     }
 }

@@ -64,6 +64,8 @@ services:
     image: ghcr.io/ojparkinson/iracing-telemetryservice:latest
     container_name: telemetry_service
     restart: on-failure
+    ports:
+      - "5000:5000"
     depends_on:
       influxdb:
         condition: service_healthy
@@ -77,6 +79,9 @@ services:
       INFLUX_BUCKET: telemetry
       INFLUX_ORG: myorg
       DOTNET_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5000
+      DOTNET_GCRetainVM: 1
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: true
     deploy:
       resources:
         limits:
