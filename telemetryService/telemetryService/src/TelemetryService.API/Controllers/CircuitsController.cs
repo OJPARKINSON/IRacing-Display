@@ -5,11 +5,11 @@ namespace TelemetryService.API.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class CircuitController : ControllerBase
+public class CircuitsController : ControllerBase
 {
     private readonly IWebHostEnvironment _environment;
 
-    public CircuitController(IWebHostEnvironment environment)
+    public CircuitsController(IWebHostEnvironment environment)
     {
         _environment = environment;
     }

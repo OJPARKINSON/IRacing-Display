@@ -3,6 +3,16 @@ const nextConfig = {
 	output: process.env.NODE_ENV === "production" ? "standalone" : undefined,
 	serverExternalPackages: ["@influxdata/influxdb-client"],
 	reactStrictMode: true,
+
+	async rewrites() {
+		return [
+			{
+				source: '/osm-tiles/:z/:x/:y.png',
+				destination: 'https://tile.openstreetmap.org/:z/:x/:y.png',
+			},
+		];
+	},
+
 	async headers() {
 		return [
 			{
@@ -20,6 +30,15 @@ const nextConfig = {
 						value:
 							"X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version",
 					},
+				],
+			},
+			{
+				// Add CORS headers for tile proxy
+				source: "/osm-tiles/:path*",
+				headers: [
+					{ key: "Access-Control-Allow-Origin", value: "*" },
+					{ key: "Access-Control-Allow-Methods", value: "GET" },
+					{ key: "Cache-Control", value: "public, max-age=3600" },
 				],
 			},
 		];
