@@ -6,16 +6,11 @@ import View from "ol/View";
 import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
 import { Style, Stroke, Circle, Fill, Text } from "ol/style";
-import { DragPan, MouseWheelZoom } from "ol/interaction";
-import { defaults as defaultControls } from "ol/control";
-import { fromLonLat, transform } from "ol/proj";
-import Feature from "ol/Feature";
-import { LineString, Point, Polygon } from "ol/geom";
 import TileLayer from "ol/layer/Tile";
-import OSM from "ol/source/OSM";
-import { getCenter } from "ol/extent";
-import "ol/ol.css";
-import { useMapLayers } from "@/hooks/useMapLayers";
+import XYZ from "ol/source/XYZ";
+import { fromLonLat } from "ol/proj";
+import Feature from "ol/Feature";
+import { LineString, Point } from "ol/geom";
 import { TelemetryDataPoint } from "@/lib/types";
 
 interface TrackMapProps {
@@ -31,290 +26,151 @@ export default function GPSTrackMap({
 	selectedPointIndex,
 	isScrubbing,
 }: TrackMapProps) {
-	const mapContainerRef = useRef<HTMLDivElement | null>(null);
-	const [mapInitialized, setMapInitialized] = useState<boolean>(false);
-	const [trackBounds, setTrackBounds] = useState<any>(null);
-	const olMapRef = useRef<Map | null>(null);
+	const mapRef = useRef<HTMLDivElement>(null);
+	const mapInstanceRef = useRef<Map | null>(null);
+	const racingLineSourceRef = useRef<VectorSource | null>(null);
+	const carPositionSourceRef = useRef<VectorSource | null>(null);
+	const selectedMarkerSourceRef = useRef<VectorSource | null>(null);
 
-	// Custom hook for map layers and sources
-	const {
-		racingLineSourceRef,
-		carPositionSourceRef,
-		selectedMarkerSourceRef,
-		hoverMarkerSourceRef,
-	} = useMapLayers();
-
-	// Load track boundaries from OpenStreetMap using Overpass API
-	const loadTrackBoundaries = async (trackBoundariesSource: VectorSource) => {
-		try {
-			// Overpass API query for Monza race track
-			const overpassQuery = `
-        [out:json][timeout:25];
-        (
-          way["sport"="motor"]["name"~"Monza",i];
-          way["motorsport"="yes"]["name"~"Monza",i];
-          way["highway"="raceway"]["name"~"Monza",i];
-          relation["sport"="motor"]["name"~"Monza",i];
-        );
-        out geom;
-      `;
-
-			const response = await fetch("https://overpass-api.de/api/interpreter", {
-				method: "POST",
-				body: overpassQuery,
-			});
-
-			if (response.ok) {
-				const data = await response.json();
-
-				// Process the track data
-				data.elements.forEach((element: any) => {
-					if (element.type === "way" && element.geometry) {
-						const coordinates = element.geometry.map((node: any) =>
-							fromLonLat([node.lon, node.lat]),
-						);
-
-						if (coordinates.length > 2) {
-							const trackFeature = new Feature({
-								geometry: new Polygon([coordinates]),
-							});
-							trackBoundariesSource.addFeature(trackFeature);
-						}
-					}
-				});
-
-				console.log("Track boundaries loaded from OpenStreetMap");
-			}
-		} catch (error) {
-			console.warn(
-				"Could not load track boundaries from OpenStreetMap:",
-				error,
-			);
-			// Fallback: create approximate track boundaries based on telemetry data
-			createFallbackTrackBoundaries(trackBoundariesSource);
-		}
-	};
-
-	// Initialize OpenLayers map with GPS coordinates
+	// Initialize map - similar to working NoCssTestMap
 	useEffect(() => {
-		if (mapInitialized || !mapContainerRef.current) return;
+		if (!mapRef.current || mapInstanceRef.current) return;
 
-		const initializeMap = (): void => {
-			// Create sources
-			const racingLineSource = new VectorSource();
-			racingLineSourceRef.current = racingLineSource;
+		console.log('Initializing progressive track map...');
 
-			const carPositionSource = new VectorSource();
-			carPositionSourceRef.current = carPositionSource;
+		// Create sources
+		const racingLineSource = new VectorSource();
+		const carPositionSource = new VectorSource();
+		const selectedMarkerSource = new VectorSource();
 
-			const hoverMarkerSource = new VectorSource();
-			hoverMarkerSourceRef.current = hoverMarkerSource;
+		// Store refs
+		racingLineSourceRef.current = racingLineSource;
+		carPositionSourceRef.current = carPositionSource;
+		selectedMarkerSourceRef.current = selectedMarkerSource;
 
-			const selectedMarkerSource = new VectorSource();
-			selectedMarkerSourceRef.current = selectedMarkerSource;
+		// Create layers - start simple like the working version
+		const baseLayer = new TileLayer({
+			source: new XYZ({
+				url: '/osm-tiles/{z}/{x}/{y}.png',
+				attributions: '© OpenStreetMap contributors'
+			})
+		});
 
-			// Track boundaries source (for OpenStreetMap data)
-			const trackBoundariesSource = new VectorSource();
+		const racingLineLayer = new VectorLayer({
+			source: racingLineSource,
+			style: new Style({
+				stroke: new Stroke({
+					color: "#ff0000",
+					width: 4,
+				}),
+			}),
+		});
 
-			// Create layers
-			const osmLayer = new TileLayer({
-				source: new OSM(),
-			});
-
-			const trackBoundariesLayer = new VectorLayer({
-				source: trackBoundariesSource,
-				style: new Style({
+		const carPositionLayer = new VectorLayer({
+			source: carPositionSource,
+			style: new Style({
+				image: new Circle({
+					radius: 8,
 					fill: new Fill({
-						color: "rgba(128, 128, 128, 0.2)",
+						color: "#00ff00",
 					}),
 					stroke: new Stroke({
-						color: "#808080",
+						color: "#000000",
 						width: 2,
 					}),
 				}),
-				zIndex: 1,
-			});
+			}),
+		});
 
-			const racingLineLayer = new VectorLayer({
-				source: racingLineSource,
-				style: new Style({
+		const selectedMarkerLayer = new VectorLayer({
+			source: selectedMarkerSource,
+			style: new Style({
+				image: new Circle({
+					radius: 10,
+					fill: new Fill({
+						color: "#00ffff",
+					}),
 					stroke: new Stroke({
-						color: "#ff0000",
-						width: 4,
+						color: "#000000",
+						width: 2,
 					}),
 				}),
-				zIndex: 10,
-			});
+			}),
+		});
 
-			const carPositionLayer = new VectorLayer({
-				source: carPositionSource,
-				style: new Style({
-					image: new Circle({
-						radius: 8,
-						fill: new Fill({
-							color: "#00ff00",
-						}),
-						stroke: new Stroke({
-							color: "#000000",
-							width: 2,
-						}),
-					}),
-				}),
-				zIndex: 15,
-			});
+		// Create map - keep it simple like the working version
+		const map = new Map({
+			target: mapRef.current,
+			layers: [
+				baseLayer,
+				racingLineLayer,
+				carPositionLayer,
+				selectedMarkerLayer,
+			],
+			view: new View({
+				center: fromLonLat([9.2808, 45.6162]), // Monza coordinates
+				zoom: 15,
+				maxZoom: 20,
+				minZoom: 5,
+			}),
+		});
 
-			const selectedMarkerLayer = new VectorLayer({
-				source: selectedMarkerSource,
-				style: new Style({
-					image: new Circle({
-						radius: 10,
-						fill: new Fill({
-							color: "#00ffff",
-						}),
-						stroke: new Stroke({
-							color: "#000000",
-							width: 2,
-						}),
-					}),
-				}),
-				zIndex: 20,
-			});
+		mapInstanceRef.current = map;
 
-			// Create the map
-			const map = new Map({
-				target: mapContainerRef.current!,
-				layers: [
-					osmLayer,
-					trackBoundariesLayer,
-					racingLineLayer,
-					carPositionLayer,
-					selectedMarkerLayer,
-				],
-				controls: defaultControls({ zoom: true, rotate: false }),
-				view: new View({
-					center: fromLonLat([9.2808, 45.6162]), // Monza coordinates
-					zoom: 15,
-					maxZoom: 20,
-					minZoom: 10,
-				}),
-			});
+		console.log('Progressive track map initialized');
 
-			// Add interactions
-			map.addInteraction(new DragPan());
-			map.addInteraction(new MouseWheelZoom());
-
-			olMapRef.current = map;
-
-			// Load track boundaries from OpenStreetMap
-			loadTrackBoundaries(trackBoundariesSource);
-
-			setMapInitialized(true);
-		};
-
-		initializeMap();
-
-		// Cleanup function
 		return () => {
-			if (olMapRef.current) {
-				olMapRef.current.setTarget(undefined);
-				olMapRef.current = null;
-				racingLineSourceRef.current = null;
-				carPositionSourceRef.current = null;
-				selectedMarkerSourceRef.current = null;
-				hoverMarkerSourceRef.current = null;
+			if (mapInstanceRef.current) {
+				mapInstanceRef.current.setTarget(undefined);
+				mapInstanceRef.current = null;
 			}
+			racingLineSourceRef.current = null;
+			carPositionSourceRef.current = null;
+			selectedMarkerSourceRef.current = null;
 		};
-	}, [
-		racingLineSourceRef,
-		carPositionSourceRef,
-		selectedMarkerSourceRef,
-		hoverMarkerSourceRef,
-		mapInitialized,
-		loadTrackBoundaries,
-	]);
+	}, []); // Simple dependency array
 
-
-
-	// Create approximate track boundaries based on telemetry data
-	const createFallbackTrackBoundaries = (
-		trackBoundariesSource: VectorSource,
-	) => {
-		if (dataWithCoordinates.length === 0) return;
-
-		try {
-			// Convert GPS coordinates to map projection
-			const trackPoints = dataWithCoordinates
-				.filter((point) => point.Lat && point.Lon)
-				.map((point) => fromLonLat([point.Lon, point.Lat]));
-
-			if (trackPoints.length > 3) {
-				// Create a buffer around the racing line to approximate track boundaries
-				const bufferDistance = 50; // meters
-
-				// Simple approach: create inner and outer boundaries
-				const outerBoundary = trackPoints.map(([x, y]) => [
-					x + bufferDistance,
-					y + bufferDistance,
-				]);
-				const innerBoundary = trackPoints.map(([x, y]) => [
-					x - bufferDistance,
-					y - bufferDistance,
-				]);
-
-				const trackBoundary = new Feature({
-					geometry: new Polygon([outerBoundary]),
-				});
-
-				trackBoundariesSource.addFeature(trackBoundary);
-			}
-		} catch (error) {
-			console.error("Error creating fallback track boundaries:", error);
-		}
-	};
-
-	// Update racing line with GPS coordinates
+	// Separate effect for telemetry data
 	useEffect(() => {
-		if (
-			!mapInitialized ||
-			!olMapRef.current ||
-			!racingLineSourceRef.current ||
-			!carPositionSourceRef.current ||
-			dataWithCoordinates.length === 0
-		) {
+		if (!mapInstanceRef.current || !racingLineSourceRef.current || !carPositionSourceRef.current) {
 			return;
 		}
 
+		if (dataWithCoordinates.length === 0) {
+			return;
+		}
+
+		console.log('Updating racing line with', dataWithCoordinates.length, 'points');
+
+		// Clear previous data
 		racingLineSourceRef.current.clear();
 		carPositionSourceRef.current.clear();
 
 		try {
-			// Filter points with valid GPS coordinates
+			// Filter valid GPS points
 			const validGPSPoints = dataWithCoordinates.filter(
 				(point) => point.Lat && point.Lon && point.Lat !== 0 && point.Lon !== 0,
 			);
 
 			if (validGPSPoints.length === 0) {
-				console.warn("No valid GPS coordinates found in telemetry data");
+				console.warn("No valid GPS coordinates found");
 				return;
 			}
 
-			// Convert GPS coordinates to map projection
+			console.log('Valid GPS points:', validGPSPoints.length);
+
+			// Create racing line
 			const lineCoordinates = validGPSPoints.map((point) =>
 				fromLonLat([point.Lon, point.Lat]),
 			);
 
-			// Create the racing line
 			const lineFeature = new Feature({
 				geometry: new LineString(lineCoordinates),
 			});
 
-			// Style based on speed
-			const speedGradientStyle = createSpeedGradientStyle(validGPSPoints);
-			lineFeature.setStyle(speedGradientStyle);
-
 			racingLineSourceRef.current.addFeature(lineFeature);
 
-			// Add speed-based segments for better visualization
+			// Add speed-colored segments
 			for (let i = 0; i < validGPSPoints.length - 1; i++) {
 				const point = validGPSPoints[i];
 				const nextPoint = validGPSPoints[i + 1];
@@ -348,7 +204,6 @@ export default function GPSTrackMap({
 				const carFeature = new Feature({
 					geometry: new Point(fromLonLat([startPoint.Lon, startPoint.Lat])),
 				});
-
 				carPositionSourceRef.current.addFeature(carFeature);
 			}
 
@@ -356,25 +211,21 @@ export default function GPSTrackMap({
 			if (!isScrubbing) {
 				const geometry = lineFeature.getGeometry();
 				if (geometry) {
-					olMapRef.current.getView().fit(geometry.getExtent(), {
+					mapInstanceRef.current.getView().fit(geometry.getExtent(), {
 						padding: [100, 100, 100, 100],
 						duration: 1000,
 						maxZoom: 18,
 					});
 				}
 			}
-		} catch (error) {
-			console.error("Error rendering GPS-based racing line:", error);
-		}
-	}, [
-		dataWithCoordinates,
-		mapInitialized,
-		isScrubbing,
-		racingLineSourceRef,
-		carPositionSourceRef,
-	]);
 
-	// Update selected marker
+			console.log('Racing line updated successfully');
+		} catch (error) {
+			console.error("Error updating racing line:", error);
+		}
+	}, [dataWithCoordinates, isScrubbing]);
+
+	// Separate effect for selected marker
 	useEffect(() => {
 		if (!selectedMarkerSourceRef.current || dataWithCoordinates.length === 0) {
 			return;
@@ -428,54 +279,31 @@ export default function GPSTrackMap({
 			selectedMarkerSourceRef.current.addFeature(markerFeature);
 
 			// Center map on selected point when scrubbing
-			if (isScrubbing && olMapRef.current) {
-				olMapRef.current.getView().animate({
+			if (isScrubbing && mapInstanceRef.current) {
+				mapInstanceRef.current.getView().animate({
 					center: markerCoords,
 					duration: 300,
 				});
 			}
 		}
-	}, [
-		selectedPointIndex,
-		dataWithCoordinates,
-		isScrubbing,
-		selectedMarkerSourceRef,
-	]);
-
-	// Helper function to create speed gradient style
-	const createSpeedGradientStyle = (points: TelemetryDataPoint[]) => {
-		const speeds = points.map((p) => p.Speed);
-		const minSpeed = Math.min(...speeds);
-		const maxSpeed = Math.max(...speeds);
-
-		return new Style({
-			stroke: new Stroke({
-				color: "#ff0000",
-				width: 4,
-			}),
-		});
-	};
+	}, [selectedPointIndex, dataWithCoordinates, isScrubbing]);
 
 	// Helper function to get color based on speed
 	const getSpeedColor = (speed: number): string => {
-		// Normalize speed to 0-1 range (assuming max speed around 300 km/h)
 		const normalizedSpeed = Math.min(speed / 300, 1);
 
 		if (normalizedSpeed < 0.3) {
-			// Low speed - red
-			return "#ff0000";
+			return "#ff0000"; // Low speed - red
 		} else if (normalizedSpeed < 0.6) {
-			// Medium speed - yellow
-			return "#ffff00";
+			return "#ffff00"; // Medium speed - yellow
 		} else {
-			// High speed - green
-			return "#00ff00";
+			return "#00ff00"; // High speed - green
 		}
 	};
 
 	const handleZoomIn = (): void => {
-		if (olMapRef.current) {
-			const view = olMapRef.current.getView();
+		if (mapInstanceRef.current) {
+			const view = mapInstanceRef.current.getView();
 			view.animate({
 				zoom: view.getZoom()! + 0.5,
 				duration: 250,
@@ -484,8 +312,8 @@ export default function GPSTrackMap({
 	};
 
 	const handleZoomOut = (): void => {
-		if (olMapRef.current) {
-			const view = olMapRef.current.getView();
+		if (mapInstanceRef.current) {
+			const view = mapInstanceRef.current.getView();
 			view.animate({
 				zoom: view.getZoom()! - 0.5,
 				duration: 250,
@@ -529,8 +357,21 @@ export default function GPSTrackMap({
 				</div>
 			</div>
 
+			{/* Debug info */}
+			<div className="absolute bottom-2 left-2 z-10 bg-gray-700 bg-opacity-90 p-2 rounded text-white text-xs">
+				<div>GPS Points: {dataWithCoordinates.length}</div>
+				<div>Map: {mapInstanceRef.current ? 'Initialized' : 'Not ready'}</div>
+			</div>
+
 			{/* Map container */}
-			<div ref={mapContainerRef} className="w-full h-full" />
+			<div
+				ref={mapRef}
+				className="w-full h-full"
+				style={{
+					width: '100%',
+					height: '100%',
+				}}
+			/>
 		</div>
 	);
 }
