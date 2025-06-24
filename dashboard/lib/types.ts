@@ -8,23 +8,56 @@ export interface TelemetryDataPoint {
 	index: number;
 	time: number;
 	sessionTime: number;
-	Speed: number;
+	Speed: number; // GPS vehicle speed (converted to km/h for display)
 	RPM: number;
 	Throttle: number;
 	Brake: number;
 	Gear: number;
 	LapDistPct: number;
-	SteeringWheelAngle: number;
-	Lat: number;
-	Lon: number;
-	VelocityX: number;
-	VelocityY: number;
+	SteeringWheelAngle: number; // Steering wheel angle in radians
+	Lat: number; // Latitude in decimal degrees
+	Lon: number; // Longitude in decimal degrees
+	VelocityX: number; // X velocity in m/s
+	VelocityY: number; // Y velocity in m/s
 	FuelLevel: number;
 	LapCurrentLapTime: number;
 	PlayerCarPosition: number;
-	coordinates?: [number, number]; // Added for storing calculated coordinates
+	coordinates?: [number, number]; // For storing calculated coordinates
 	TrackName: string;
 	SessionNum: string;
+
+	// 🆕 ADD THESE NEW FIELDS for real iRacing data:
+
+	// Real iRacing acceleration data (all in m/s²)
+	LatAccel?: number; // Lateral acceleration (including gravity)
+	LongAccel?: number; // Longitudinal acceleration (including gravity)
+	VertAccel?: number; // Vertical acceleration (including gravity)
+	Alt?: number; // Altitude in meters
+
+	// Processed acceleration fields
+	longitudinalAccel?: number; // Processed longitudinal acceleration
+	lateralAccel?: number; // Processed lateral acceleration
+	verticalAccel?: number; // Processed vertical acceleration
+	totalAcceleration?: number; // Combined acceleration magnitude
+	horizontalAcceleration?: number; // 2D acceleration (lat + long)
+
+	// Enhanced GPS processing fields
+	elevation?: number; // Real or processed elevation
+	heading?: number; // GPS-derived heading/bearing
+	distanceFromPrev?: number; // Distance from previous point (meters)
+	gpsValid?: boolean; // Whether GPS coordinates are valid
+	originalIndex?: number; // Original index in the telemetry array
+	normalizedSpeed?: number; // Speed normalized to 0-1 range for color mapping
+	normalizedAcceleration?: number; // Acceleration normalized to 0-1 range
+	sectionType?: "straight" | "corner" | "gentle_turn"; // Track section classification
+	turnRadius?: number; // Estimated turn radius for corners
+
+	// Additional iRacing orientation data
+	VelocityZ?: number; // Z velocity in m/s
+	Pitch?: number; // Pitch orientation in radians
+	Roll?: number; // Roll orientation in radians
+	Yaw?: number; // Yaw orientation in radians
+	YawNorth?: number; // Yaw orientation relative to north in radians
 }
 
 // Type for raw telemetry data from API
@@ -47,6 +80,15 @@ interface RawTelemetryData {
 	player_car_position?: number;
 	track_name?: string;
 	session_num?: string;
+	lat_accel?: number;       // Maps to LatAccel
+	long_accel?: number;      // Maps to LongAccel  
+	vert_accel?: number;      // Maps to VertAccel
+	alt?: number;             // Maps to Alt
+	velocity_z?: number;      // Maps to VelocityZ
+	pitch?: number;           // Maps to Pitch
+	roll?: number;            // Maps to Roll
+	yaw?: number;             // Maps to Yaw
+	yaw_north?: number;       // Maps to YawNorth
 }
 
 // Type for telemetry response from API

@@ -16,12 +16,14 @@ import { useTrackPosition } from "@/hooks/useTrackPosition";
 import GPSTrackMap from "@/components/trackMap";
 import { TelemetryDataPoint } from "@/lib/types";
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import TrackViewSwitcher from "@/components/TrackViewSwitcher";
 
 interface Params {
 	params: Promise<{
 		sessionId: string;
 	}>;
 }
+
 
 export default function TelemetryPage({ params }: Params) {
 	const router = useRouter();
@@ -57,6 +59,12 @@ export default function TelemetryPage({ params }: Params) {
 
 	const trackName = telemetry?.[0]?.TrackName || "Unknown Track";
 	const sessionNum = telemetry?.[0]?.SessionNum || sessionId;
+
+	const handleTrackPointClick = (index: number) => {
+		handlePointSelection(index);
+		setIsScrubbing(true);
+		setTimeout(() => setIsScrubbing(false), 500);
+	};
 
 	return (
 		<div className="p-4 bg-gray-900 text-white min-h-screen">
@@ -99,9 +107,9 @@ export default function TelemetryPage({ params }: Params) {
 							GPS Coverage:{" "}
 							{telemetry
 								? (
-										(dataWithGPSCoordinates.length / telemetry.length) *
-										100
-									).toFixed(1)
+									(dataWithGPSCoordinates.length / telemetry.length) *
+									100
+								).toFixed(1)
 								: 0}
 							%
 						</p>
@@ -148,12 +156,14 @@ export default function TelemetryPage({ params }: Params) {
 					</h2>
 
 					{dataWithGPSCoordinates.length > 0 ? (
-						<GPSTrackMap
+						<TrackViewSwitcher
 							dataWithCoordinates={dataWithGPSCoordinates}
 							selectedPointIndex={selectedIndex}
 							selectedLapPct={selectedLapPct}
 							isScrubbing={isScrubbing}
 							getTrackDisplayPoint={getTrackDisplayPoint}
+							onPointClick={handleTrackPointClick}
+							trackName={trackName}
 						/>
 					) : (
 						<div className="h-[500px] bg-gray-700 rounded-lg flex items-center justify-center">

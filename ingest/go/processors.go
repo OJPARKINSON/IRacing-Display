@@ -64,8 +64,9 @@ func (l *loaderProcessor) flushTimerCallback() {
 func (l *loaderProcessor) Whitelist() []string {
 	return []string{
 		"Lap", "LapDistPct", "Speed", "Throttle", "Brake", "Gear", "RPM",
-		"SteeringWheelAngle", "VelocityX", "VelocityY", "Lat", "Lon", "SessionTime",
-		"LapCurrentLapTime", "PlayerCarPosition", "FuelLevel", "PlayerCarIdx", "SessionNum",
+		"SteeringWheelAngle", "VelocityX", "VelocityY", "VelocityZ", "Lat", "Lon", "SessionTime",
+		"LapCurrentLapTime", "PlayerCarPosition", "FuelLevel", "PlayerCarIdx", "SessionNum", "alt", "LatAccel",
+		"LongAccel", "VertAccel", "pitch", "roll", "yaw", "YawNorth",
 	}
 }
 

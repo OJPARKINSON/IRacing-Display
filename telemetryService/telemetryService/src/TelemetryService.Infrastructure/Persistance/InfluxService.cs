@@ -30,7 +30,7 @@ public class InfluxService : IDisposable
     {
         _client?.Dispose();
     }
-    
+
     public async Task WriteTicks(List<TelemetryData>? telData)
     {
         if (telData == null || telData.Count == 0)
@@ -118,11 +118,20 @@ public class InfluxService : IDisposable
                             .Field("steering_wheel_angle", tel.Steering_wheel_angle)
                             .Field("velocity_x", tel.Velocity_x)
                             .Field("velocity_y", tel.Velocity_y)
+                            .Field("velocity_z", tel.Velocity_Z)
                             .Field("lat", tel.Lat)
                             .Field("lon", tel.Lon)
                             .Field("player_car_position", tel.Player_car_position)
                             .Field("fuel_level", tel.Fuel_level)
                             .Field("tick_time", tel.Tick_time)
+                            .Field("alt", tel.Alt)
+                            .Field("lat_accel", tel.Lat_accel)
+                            .Field("long_accel", tel.Long_accel)
+                            .Field("vert_accel", tel.Vert_accel)
+                            .Field("pitch", tel.Pitch)
+                            .Field("roll", tel.Roll)
+                            .Field("yaw", tel.Yaw)
+                            .Field("yaw_north", tel.Yaw_north)
                             .Timestamp(DateTime.Parse(tel.Tick_time), WritePrecision.Ns)
                     );
                 }

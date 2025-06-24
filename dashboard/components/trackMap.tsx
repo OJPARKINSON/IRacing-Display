@@ -28,27 +28,32 @@ export default function GPSTrackMap({
 }: TrackMapProps) {
 	const mapRef = useRef<HTMLDivElement>(null);
 	const mapInstanceRef = useRef<Map | null>(null);
-	const racingLineSourceRef = useRef<VectorSource | null>(null);
+
+	// Separate sources for different visual elements
+	const mainLineSourceRef = useRef<VectorSource | null>(null);
+	const speedSegmentsSourceRef = useRef<VectorSource | null>(null);
 	const carPositionSourceRef = useRef<VectorSource | null>(null);
 	const selectedMarkerSourceRef = useRef<VectorSource | null>(null);
 
-	// Initialize map - similar to working NoCssTestMap
+	// Initialize map
 	useEffect(() => {
 		if (!mapRef.current || mapInstanceRef.current) return;
 
 		console.log('Initializing progressive track map...');
 
-		// Create sources
-		const racingLineSource = new VectorSource();
+		// Create separate sources for different visual elements
+		const mainLineSource = new VectorSource();
+		const speedSegmentsSource = new VectorSource();
 		const carPositionSource = new VectorSource();
 		const selectedMarkerSource = new VectorSource();
 
 		// Store refs
-		racingLineSourceRef.current = racingLineSource;
+		mainLineSourceRef.current = mainLineSource;
+		speedSegmentsSourceRef.current = speedSegmentsSource;
 		carPositionSourceRef.current = carPositionSource;
 		selectedMarkerSourceRef.current = selectedMarkerSource;
 
-		// Create layers - start simple like the working version
+		// Create base layer
 		const baseLayer = new TileLayer({
 			source: new XYZ({
 				url: '/osm-tiles/{z}/{x}/{y}.png',
@@ -56,16 +61,23 @@ export default function GPSTrackMap({
 			})
 		});
 
-		const racingLineLayer = new VectorLayer({
-			source: racingLineSource,
+		// Main racing line layer (background - dark line)
+		const mainLineLayer = new VectorLayer({
+			source: mainLineSource,
 			style: new Style({
 				stroke: new Stroke({
-					color: "#ff0000",
-					width: 4,
+					color: "#ed0909", // Dark background line
+					width: 10,
 				}),
 			}),
 		});
 
+		// Speed-colored segments layer (foreground - colored by speed)
+		const speedSegmentsLayer = new VectorLayer({
+			source: speedSegmentsSource,
+		});
+
+		// Car position layer
 		const carPositionLayer = new VectorLayer({
 			source: carPositionSource,
 			style: new Style({
@@ -98,14 +110,15 @@ export default function GPSTrackMap({
 			}),
 		});
 
-		// Create map - keep it simple like the working version
+		// Create map with layers in correct order (background to foreground)
 		const map = new Map({
 			target: mapRef.current,
 			layers: [
-				baseLayer,
-				racingLineLayer,
-				carPositionLayer,
-				selectedMarkerLayer,
+				baseLayer,           // Base map tiles
+				mainLineLayer,       // Dark background racing line
+				speedSegmentsLayer,  // Speed-colored segments on top
+				carPositionLayer,    // Car position
+				selectedMarkerLayer, // Selected point marker
 			],
 			view: new View({
 				center: fromLonLat([9.2808, 45.6162]), // Monza coordinates
@@ -124,7 +137,8 @@ export default function GPSTrackMap({
 				mapInstanceRef.current.setTarget(undefined);
 				mapInstanceRef.current = null;
 			}
-			racingLineSourceRef.current = null;
+			mainLineSourceRef.current = null;
+			speedSegmentsSourceRef.current = null;
 			carPositionSourceRef.current = null;
 			selectedMarkerSourceRef.current = null;
 		};
@@ -132,7 +146,10 @@ export default function GPSTrackMap({
 
 	// Separate effect for telemetry data
 	useEffect(() => {
-		if (!mapInstanceRef.current || !racingLineSourceRef.current || !carPositionSourceRef.current) {
+		if (!mapInstanceRef.current ||
+			!mainLineSourceRef.current ||
+			!speedSegmentsSourceRef.current ||
+			!carPositionSourceRef.current) {
 			return;
 		}
 
@@ -143,11 +160,11 @@ export default function GPSTrackMap({
 		console.log('Updating racing line with', dataWithCoordinates.length, 'points');
 
 		// Clear previous data
-		racingLineSourceRef.current.clear();
+		mainLineSourceRef.current.clear();
+		speedSegmentsSourceRef.current.clear();
 		carPositionSourceRef.current.clear();
 
 		try {
-			// Filter valid GPS points
 			const validGPSPoints = dataWithCoordinates.filter(
 				(point) => point.Lat && point.Lon && point.Lat !== 0 && point.Lon !== 0,
 			);
@@ -159,21 +176,35 @@ export default function GPSTrackMap({
 
 			console.log('Valid GPS points:', validGPSPoints.length);
 
-			// Create racing line
+			// Debug: Check sample speed values
+			console.log('Sample speed values:', validGPSPoints.slice(0, 5).map(p => ({
+				index: p,
+				speed: p.Speed,
+				type: typeof p.Speed
+			})));
+
+			// Create main racing line (background)
 			const lineCoordinates = validGPSPoints.map((point) =>
 				fromLonLat([point.Lon, point.Lat]),
 			);
 
-			const lineFeature = new Feature({
+			const mainLineFeature = new Feature({
 				geometry: new LineString(lineCoordinates),
 			});
 
-			racingLineSourceRef.current.addFeature(lineFeature);
+			mainLineSourceRef.current.addFeature(mainLineFeature);
 
-			// Add speed-colored segments
+			// Add speed-colored segments (foreground)
+			let segmentsAdded = 0;
 			for (let i = 0; i < validGPSPoints.length - 1; i++) {
 				const point = validGPSPoints[i];
 				const nextPoint = validGPSPoints[i + 1];
+
+				// Check if speed exists and is valid
+				if (typeof point.Speed !== 'number' || isNaN(point.Speed)) {
+					console.warn(`Invalid speed at point ${i}:`, point.Speed);
+					continue;
+				}
 
 				const segmentCoords = [
 					fromLonLat([point.Lon, point.Lat]),
@@ -190,13 +221,16 @@ export default function GPSTrackMap({
 					new Style({
 						stroke: new Stroke({
 							color: speedColor,
-							width: 6,
+							width: 3, // Visible width on top of background line
 						}),
 					}),
 				);
 
-				racingLineSourceRef.current.addFeature(segmentFeature);
+				speedSegmentsSourceRef.current.addFeature(segmentFeature);
+				segmentsAdded++;
 			}
+
+			console.log(`Added ${segmentsAdded} speed-colored segments`);
 
 			// Add car position at start
 			const startPoint = validGPSPoints[0];
@@ -209,7 +243,7 @@ export default function GPSTrackMap({
 
 			// Fit view to racing line
 			if (!isScrubbing) {
-				const geometry = lineFeature.getGeometry();
+				const geometry = mainLineFeature.getGeometry();
 				if (geometry) {
 					mapInstanceRef.current.getView().fit(geometry.getExtent(), {
 						padding: [100, 100, 100, 100],
@@ -290,6 +324,7 @@ export default function GPSTrackMap({
 
 	// Helper function to get color based on speed
 	const getSpeedColor = (speed: number): string => {
+		// Normalize speed (adjust max speed as needed for your data)
 		const normalizedSpeed = Math.min(speed / 300, 1);
 
 		if (normalizedSpeed < 0.3) {
@@ -361,6 +396,8 @@ export default function GPSTrackMap({
 			<div className="absolute bottom-2 left-2 z-10 bg-gray-700 bg-opacity-90 p-2 rounded text-white text-xs">
 				<div>GPS Points: {dataWithCoordinates.length}</div>
 				<div>Map: {mapInstanceRef.current ? 'Initialized' : 'Not ready'}</div>
+				<div>Main Line: {mainLineSourceRef.current?.getFeatures().length || 0}</div>
+				<div>Speed Segments: {speedSegmentsSourceRef.current?.getFeatures().length || 0}</div>
 			</div>
 
 			{/* Map container */}
