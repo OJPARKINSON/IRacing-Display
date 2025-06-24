@@ -185,6 +185,7 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			"player_car_position":  getFloatValue(record, "PlayerCarPosition"),
 			"velocity_x":           getFloatValue(record, "VelocityX"),
 			"velocity_y":           getFloatValue(record, "VelocityY"),
+			"velocity_z":           getFloatValue(record, "VelocityZ"),
 			"fuel_level":           getFloatValue(record, "FuelLevel"),
 			"throttle":             getFloatValue(record, "Throttle"),
 			"brake":                getFloatValue(record, "Brake"),
@@ -192,6 +193,14 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			"lat":                  getFloatValue(record, "Lat"),
 			"lon":                  getFloatValue(record, "Lon"),
 			"gear":                 getIntValue(record, "Gear"),
+			"alt":                  getFloatValue(record, "Alt"),
+			"lat_accel":            getFloatValue(record, "LatAccel"),
+			"long_accel":           getFloatValue(record, "LongAccel"),
+			"vert_accel":           getFloatValue(record, "VertAccel"),
+			"pitch":                getFloatValue(record, "Pitch"),
+			"roll":                 getFloatValue(record, "Roll"),
+			"yaw":                  getFloatValue(record, "Yaw"),
+			"yaw_north":            getFloatValue(record, "YawNorth"),
 			"tick_time":            tickTime.UTC(),
 		}
 

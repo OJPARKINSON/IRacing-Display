@@ -24,4 +24,13 @@ public class TelemetryData
     public string? Tick_time { get; set; }
     public double Velocity_x { get; set; }
     public double Velocity_y { get; set; }
+    public double Velocity_Z { get; set; }
+    public double Alt { get; set; }
+    public double Lat_accel { get; set; }
+    public double Long_accel { get; set; }
+    public double Vert_accel { get; set; }
+    public double Pitch { get; set; }
+    public double Roll { get; set; }
+    public double Yaw { get; set; }
+    public double Yaw_north { get; set; }
 }
