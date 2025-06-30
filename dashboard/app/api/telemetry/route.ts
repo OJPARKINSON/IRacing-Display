@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
 		const query = `
       from(bucket: "${bucketName}")
-        |> range(start: -30d)
+        |> range(start: -365d)
         |> filter(fn: (r) => r._measurement == "telemetry_ticks")
         |> filter(fn: (r) => r.lap_id == "${lapId}")
         |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
@@ -30,8 +30,7 @@ export async function GET(request: NextRequest) {
     `;
 
 		console.log(
-			`Executing optimized query on bucket: ${bucketName} for lap: ${lapId}${
-				useSeparateBuckets ? "" : " and session: " + sessionId
+			`Executing optimized query on bucket: ${bucketName} for lap: ${lapId}${useSeparateBuckets ? "" : " and session: " + sessionId
 			}`,
 		);
 

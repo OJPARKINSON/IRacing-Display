@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { TelemetryDataPoint } from "@/lib/types";
 import EnhancedGPSTrackMap from "./EnhancedTrackMap2D";
-import Track3D from "./Track3d";
 
-interface TrackViewSwitcherProps {
+interface TrackViewProps {
     dataWithCoordinates: TelemetryDataPoint[];
     selectedPointIndex: number;
     selectedLapPct: number;
@@ -15,9 +13,7 @@ interface TrackViewSwitcherProps {
     trackName?: string;
 }
 
-type ViewMode = '2d' | '3d';
-
-export default function TrackViewSwitcher({
+export default function TrackView({
     dataWithCoordinates,
     selectedPointIndex,
     selectedLapPct,
@@ -25,8 +21,7 @@ export default function TrackViewSwitcher({
     getTrackDisplayPoint,
     onPointClick,
     trackName,
-}: TrackViewSwitcherProps) {
-    const [viewMode, setViewMode] = useState<ViewMode>('2d');
+}: TrackViewProps) {
 
     // Calculate some stats for display
     const speedRange = dataWithCoordinates.length > 0 ? {
@@ -40,84 +35,17 @@ export default function TrackViewSwitcher({
 
     return (
         <div className="bg-gray-800 rounded-lg overflow-hidden">
-            {/* Header with view switcher */}
-            <div className="p-4 border-b border-gray-700">
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                    <div>
-                        <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-                            GPS Track Visualization
-                            {trackName && (
-                                <span className="text-sm text-gray-400 font-normal">- {trackName}</span>
-                            )}
-                        </h2>
-                        {hasRealSensorData && (
-                            <p className="text-xs text-green-400 mt-1">
-                                ✓ Real iRacing sensor data detected
-                            </p>
-                        )}
-                    </div>
-
-                    {/* View Mode Switcher */}
-                    <div className="flex bg-gray-700 rounded-lg p-1 self-start sm:self-auto">
-                        <button
-                            onClick={() => setViewMode('2d')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === '2d'
-                                ? 'bg-blue-600 text-white shadow-md'
-                                : 'text-gray-300 hover:text-white hover:bg-gray-600'
-                                }`}
-                        >
-                            2D Map
-                        </button>
-                        <button
-                            onClick={() => setViewMode('3d')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === '3d'
-                                ? 'bg-blue-600 text-white shadow-md'
-                                : 'text-gray-300 hover:text-white hover:bg-gray-600'
-                                }`}
-                        >
-                            3D Track
-                        </button>
-                    </div>
-                </div>
-
-                {/* View Description */}
-                <div className="mt-3 text-sm text-gray-400">
-                    {viewMode === '2d' ? (
-                        <p>
-                            Interactive map with speed (blue) and lateral G-force (green) data from real iRacing sensors.
-                            Click dots to select points.
-                        </p>
-                    ) : (
-                        <p>
-                            3D track with real altitude data. Blue/green lines show speed and acceleration intensity.
-                            Drag to rotate, scroll to zoom.
-                        </p>
-                    )}
-                </div>
-            </div>
-
-            {/* Track Visualization */}
             <div className="relative">
                 {dataWithCoordinates.length > 0 ? (
                     <div className="w-full">
-                        {viewMode === '2d' ? (
-                            <EnhancedGPSTrackMap
-                                dataWithCoordinates={dataWithCoordinates}
-                                selectedPointIndex={selectedPointIndex}
-                                selectedLapPct={selectedLapPct}
-                                isScrubbing={isScrubbing}
-                                getTrackDisplayPoint={getTrackDisplayPoint}
-                                onPointClick={onPointClick}
-                            />
-                        ) : (
-                            <Track3D
-                                dataWithCoordinates={dataWithCoordinates}
-                                selectedPointIndex={selectedPointIndex}
-                                selectedLapPct={selectedLapPct}
-                                isScrubbing={isScrubbing}
-                                onPointClick={onPointClick}
-                            />
-                        )}
+                        <EnhancedGPSTrackMap
+                            dataWithCoordinates={dataWithCoordinates}
+                            selectedPointIndex={selectedPointIndex}
+                            selectedLapPct={selectedLapPct}
+                            isScrubbing={isScrubbing}
+                            getTrackDisplayPoint={getTrackDisplayPoint}
+                            onPointClick={onPointClick}
+                        />
                     </div>
                 ) : (
                     <div className="h-[600px] bg-gray-700 flex items-center justify-center">
@@ -141,13 +69,6 @@ export default function TrackViewSwitcher({
                             <div className="text-xs text-gray-400 mb-1">GPS Points</div>
                             <div className="text-lg font-bold text-white">
                                 {dataWithCoordinates.length.toLocaleString()}
-                            </div>
-                        </div>
-
-                        <div className="bg-gray-700 p-3 rounded-lg text-center">
-                            <div className="text-xs text-gray-400 mb-1">View Mode</div>
-                            <div className="text-lg font-bold text-blue-400">
-                                {viewMode.toUpperCase()}
                             </div>
                         </div>
 

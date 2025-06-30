@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
 		const query = `
       from(bucket: "${sessionId}")
-        |> range(start: -30d)
+        |> range(start: -365d)
         |> filter(fn: (r) => r._measurement == "telemetry_ticks")
         |> keep(columns: ["lap_id"])
         |> unique(column: "lap_id")
