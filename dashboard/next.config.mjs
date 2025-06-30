@@ -10,13 +10,20 @@ const nextConfig = {
 				source: '/osm-tiles/:z/:x/:y.png',
 				destination: 'https://tile.openstreetmap.org/:z/:x/:y.png',
 			},
+			{
+				source: '/carto-dark/:z/:x/:y.png',
+				destination: 'https://a.basemaps.cartocdn.com/dark_all/:z/:x/:y.png',
+			},
+			{
+				source: '/carto-dark-nolabels/:z/:x/:y.png',
+				destination: 'https://a.basemaps.cartocdn.com/dark_nolabels/:z/:x/:y.png',
+			},
 		];
 	},
 
 	async headers() {
 		return [
 			{
-				// Apply CORS headers to API routes
 				source: "/api/:path*",
 				headers: [
 					{ key: "Access-Control-Allow-Credentials", value: "true" },
@@ -33,19 +40,17 @@ const nextConfig = {
 				],
 			},
 			{
-				// Add CORS headers for tile proxy
-				source: "/osm-tiles/:path*",
+				source: "/:path*-tiles/:path*",
 				headers: [
 					{ key: "Access-Control-Allow-Origin", value: "*" },
 					{ key: "Access-Control-Allow-Methods", value: "GET" },
-					{ key: "Cache-Control", value: "public, max-age=3600" },
+					{ key: "Cache-Control", value: "public, max-age=86400" },
 				],
 			},
 		];
 	},
 
 	webpack: (config, { isServer, dev }) => {
-		// For hot reloading in Docker
 		if (dev && !isServer) {
 			config.watchOptions = {
 				...config.watchOptions,

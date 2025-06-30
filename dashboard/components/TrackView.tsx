@@ -10,7 +10,7 @@ interface TrackViewProps {
     isScrubbing: boolean;
     getTrackDisplayPoint: () => TelemetryDataPoint | null;
     onPointClick?: (index: number) => void;
-    trackName?: string;
+    selectedMetric?: string;
 }
 
 export default function TrackView({
@@ -20,7 +20,7 @@ export default function TrackView({
     isScrubbing,
     getTrackDisplayPoint,
     onPointClick,
-    trackName,
+    selectedMetric = "Speed",
 }: TrackViewProps) {
 
     // Calculate some stats for display
@@ -45,6 +45,7 @@ export default function TrackView({
                             isScrubbing={isScrubbing}
                             getTrackDisplayPoint={getTrackDisplayPoint}
                             onPointClick={onPointClick}
+                            selectedMetric={selectedMetric} // Pass the selected metric
                         />
                     </div>
                 ) : (
@@ -89,6 +90,13 @@ export default function TrackView({
                                 }
                             </div>
                         </div>
+
+                        <div className="bg-gray-700 p-3 rounded-lg text-center">
+                            <div className="text-xs text-gray-400 mb-1">Current Metric</div>
+                            <div className="text-sm font-bold text-cyan-400">
+                                {selectedMetric}
+                            </div>
+                        </div>
                     </div>
 
                     {/* Sensor Data Status */}
@@ -112,6 +120,9 @@ export default function TrackView({
                                 ⚠ Using Calculated Data
                             </span>
                         )}
+                        <span className="bg-cyan-900 text-cyan-300 px-2 py-1 rounded">
+                            🎨 Colored by {selectedMetric}
+                        </span>
                     </div>
                 </div>
             )}

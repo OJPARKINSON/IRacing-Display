@@ -11,12 +11,9 @@ import useSWR from "swr";
 
 import { TelemetryChart, InfoBox } from "@/components/InfoBox";
 import { fetcher, telemetryFetcher } from "../../lib/Fetch";
-import { useGPSTelemetryData } from "../../hooks/useGPSTelemetryData";
 import { useTrackPosition } from "@/hooks/useTrackPosition";
-// import GPSTrackMap from "@/components/trackMap";
 import { TelemetryDataPoint } from "@/lib/types";
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import TrackViewSwitcher from "@/components/TrackView";
 import TrackView from "@/components/TrackView";
 
 interface Params {
@@ -24,7 +21,6 @@ interface Params {
 		sessionId: string;
 	}>;
 }
-
 
 export default function TelemetryPage({ params }: Params) {
 	const router = useRouter();
@@ -37,17 +33,15 @@ export default function TelemetryPage({ params }: Params) {
 	const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
 
-	// Fetch telemetry data
-	const { data: telemetry, error: telError } = useSWR(
+	const { data: telemetryResponse, error: telError } = useSWR(
 		`/api/telemetry?sessionId=telemetry_${sessionId}&lapId=${lapId}`,
 		telemetryFetcher,
 	);
 
-	// Process GPS telemetry data
-	const { dataWithGPSCoordinates, trackBounds, processError } =
-		useGPSTelemetryData(telemetry, telemetry?.[0]?.TrackName);
+	const dataWithGPSCoordinates = telemetryResponse?.dataWithGPSCoordinates || [];
+	const trackBounds = telemetryResponse?.trackBounds || null;
+	const processError = telemetryResponse?.processError || null;
 
-	// Track position management
 	const {
 		selectedIndex,
 		selectedLapPct,
@@ -58,8 +52,8 @@ export default function TelemetryPage({ params }: Params) {
 	if (telError && !error) setError(telError.message);
 	if (processError && !error) setError(processError);
 
-	const trackName = telemetry?.[0]?.TrackName || "Unknown Track";
-	const sessionNum = telemetry?.[0]?.SessionNum || sessionId;
+	const trackName = dataWithGPSCoordinates?.[0]?.TrackName || "Unknown Track";
+	const sessionNum = dataWithGPSCoordinates?.[0]?.SessionNum || sessionId;
 
 	const handleTrackPointClick = (index: number) => {
 		handlePointSelection(index);
@@ -80,7 +74,6 @@ export default function TelemetryPage({ params }: Params) {
 				/>
 			</div>
 
-			{/* Track and Session Info */}
 			<div className="mb-4 bg-gray-800 p-4 rounded-lg">
 				<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 					<div>
@@ -105,14 +98,7 @@ export default function TelemetryPage({ params }: Params) {
 							GPS Points: {dataWithGPSCoordinates.length}
 						</p>
 						<p className="text-gray-300">
-							GPS Coverage:{" "}
-							{telemetry
-								? (
-									(dataWithGPSCoordinates.length / telemetry.length) *
-									100
-								).toFixed(1)
-								: 0}
-							%
+							Processing: Integrated GPS & Telemetry
 						</p>
 					</div>
 					<div>
@@ -144,10 +130,9 @@ export default function TelemetryPage({ params }: Params) {
 			</div>
 
 			{renderErrorMessage(error)}
-			{renderLoadingMessage(telemetry, error)}
+			{renderLoadingMessage(telemetryResponse, error)}
 
 			<div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-				{/* GPS Track Map */}
 				<div className="col-span-1 lg:col-span-2 bg-gray-800 p-4 rounded-lg">
 					<h2 className="text-xl font-semibold mb-2 flex items-center gap-2 pb-0">
 						GPS Track Map
@@ -164,7 +149,7 @@ export default function TelemetryPage({ params }: Params) {
 							isScrubbing={isScrubbing}
 							getTrackDisplayPoint={getTrackDisplayPoint}
 							onPointClick={handleTrackPointClick}
-							trackName={trackName}
+							selectedMetric={selectedMetric}
 						/>
 					) : (
 						<div className="h-[500px] bg-gray-700 rounded-lg flex items-center justify-center">
@@ -179,7 +164,6 @@ export default function TelemetryPage({ params }: Params) {
 					)}
 				</div>
 
-				{/* Telemetry Chart */}
 				<div>
 					<TelemetryChart
 						selectedMetric={selectedMetric}
@@ -196,15 +180,13 @@ export default function TelemetryPage({ params }: Params) {
 				</div>
 			</div>
 
-			{/* Telemetry Details */}
-			{telemetry && dataWithGPSCoordinates.length > 0 && lapId && (
+			{dataWithGPSCoordinates.length > 0 && lapId && (
 				<InfoBox
 					telemetryData={dataWithGPSCoordinates as TelemetryDataPoint[]}
 					lapId={lapId}
 				/>
 			)}
 
-			{/* GPS Data Analysis */}
 			{dataWithGPSCoordinates.length > 0 && (
 				<GPSAnalysisPanel data={dataWithGPSCoordinates} />
 			)}
@@ -212,7 +194,6 @@ export default function TelemetryPage({ params }: Params) {
 	);
 }
 
-// GPS Analysis Panel Component
 function GPSAnalysisPanel({ data }: { data: any[] }) {
 	const totalDistance = data.reduce(
 		(sum, point) => sum + (point.distanceFromPrev || 0),
@@ -314,8 +295,8 @@ function renderErrorMessage(error: string | null) {
 	);
 }
 
-function renderLoadingMessage(telemetry: any, error: string | null) {
-	if (telemetry !== undefined || error !== null) return null;
+function renderLoadingMessage(telemetryResponse: any, error: string | null) {
+	if (telemetryResponse !== undefined || error !== null) return null;
 
 	return (
 		<div className="bg-gray-800 text-white p-4 rounded mb-4 text-center">

@@ -95,3 +95,19 @@ interface RawTelemetryData {
 export interface TelemetryResponse {
 	data: RawTelemetryData[];
 }
+
+export interface TelemetryResponse {
+	data: RawTelemetryData[];
+}
+
+// Type for processed telemetry response with GPS data
+export interface ProcessedTelemetryResponse {
+	dataWithGPSCoordinates: TelemetryDataPoint[];
+	trackBounds: {
+		minLat: number;
+		maxLat: number;
+		minLon: number;
+		maxLon: number;
+	} | null;
+	processError: string | null;
+}

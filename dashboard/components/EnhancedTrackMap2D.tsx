@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Map from "ol/Map";
 import View from "ol/View";
 import VectorLayer from "ol/layer/Vector";
@@ -20,115 +20,101 @@ interface TrackMapProps {
     isScrubbing: boolean;
     getTrackDisplayPoint: () => TelemetryDataPoint | null;
     onPointClick?: (index: number) => void;
+    selectedMetric?: string;
 }
+
+// Map theme configurations
+const MAP_THEMES = {
+    dark: {
+        name: "Dark",
+        url: 'https://{a-d}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        attribution: '© OpenStreetMap contributors, © CARTO',
+        description: "Black background with white roads"
+    },
+    osm: {
+        name: "OpenStreetMap",
+        url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '© OpenStreetMap contributors',
+        description: "Standard OpenStreetMap"
+    }
+};
 
 export default function EnhancedGPSTrackMap({
     dataWithCoordinates,
     selectedPointIndex,
     isScrubbing,
     onPointClick,
+    selectedMetric = "Speed",
 }: TrackMapProps) {
     const mapRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<Map | null>(null);
     const racingLineSourceRef = useRef<VectorSource | null>(null);
-    const speedDotsSourceRef = useRef<VectorSource | null>(null);
-    const accelerationDotsSourceRef = useRef<VectorSource | null>(null);
     const selectedMarkerSourceRef = useRef<VectorSource | null>(null);
+    const baseLayerRef = useRef<TileLayer<XYZ> | null>(null);
 
-    const [showSpeedDots, setShowSpeedDots] = useState(true);
-    const [showAccelerationDots, setShowAccelerationDots] = useState(true);
-    const [showRacingLine, setShowRacingLine] = useState(true);
+    // Map theme state
+    const [mapTheme, setMapTheme] = useState<keyof typeof MAP_THEMES>('dark');
+    const [showThemeSelector, setShowThemeSelector] = useState(false);
 
-    // Initialize map
+    // Track if map has been fitted to avoid refitting on every render
+    const mapFittedRef = useRef(false);
+
+    // Track the last processed data to avoid unnecessary updates
+    const lastDataHashRef = useRef<string>("");
+
+    // Memoize processed data to prevent unnecessary recalculations
+    const processedTrackData = useMemo(() => {
+        if (!dataWithCoordinates?.length) return null;
+
+        // Filter valid GPS points
+        const validGPSPoints = dataWithCoordinates.filter(
+            (point) => point.Lat && point.Lon && point.Lat !== 0 && point.Lon !== 0,
+        );
+
+        if (validGPSPoints.length === 0) return null;
+
+        // Create hash of data to detect changes
+        const dataHash = JSON.stringify(validGPSPoints.map(p => ({
+            lat: p.Lat,
+            lon: p.Lon,
+            speed: p.Speed,
+            throttle: p.Throttle,
+            brake: p.Brake,
+            lapDistPct: p.LapDistPct
+        })));
+
+        return {
+            validGPSPoints,
+            lineCoordinates: validGPSPoints.map((point) => fromLonLat([point.Lon, point.Lat])),
+            dataHash,
+        };
+    }, [dataWithCoordinates]);
+
+    // Initialize map only once
     useEffect(() => {
         if (!mapRef.current || mapInstanceRef.current) return;
 
-        console.log('Initializing enhanced 2D track map...');
+        console.log('Initializing enhanced 2D track map with dark theme...');
 
         // Create sources
         const racingLineSource = new VectorSource();
-        const speedDotsSource = new VectorSource();
-        const accelerationDotsSource = new VectorSource();
         const selectedMarkerSource = new VectorSource();
 
         // Store refs
         racingLineSourceRef.current = racingLineSource;
-        speedDotsSourceRef.current = speedDotsSource;
-        accelerationDotsSourceRef.current = accelerationDotsSource;
         selectedMarkerSourceRef.current = selectedMarkerSource;
 
-        // Create layers
+        // Create base layer with initial theme
         const baseLayer = new TileLayer({
             source: new XYZ({
-                url: '/osm-tiles/{z}/{x}/{y}.png',
-                attributions: '© OpenStreetMap contributors'
+                url: MAP_THEMES[mapTheme].url,
+                attributions: MAP_THEMES[mapTheme].attribution
             })
         });
+        baseLayerRef.current = baseLayer;
 
         const racingLineLayer = new VectorLayer({
             source: racingLineSource,
-            style: new Style({
-                stroke: new Stroke({
-                    color: "#ffffff",
-                    width: 3,
-                }),
-            }),
-        });
-
-        // Speed dots layer (blue)
-        const speedDotsLayer = new VectorLayer({
-            source: speedDotsSource,
-            style: (feature) => {
-                const intensity = feature.get('intensity') || 0;
-                const alpha = 0.4 + intensity * 0.6;
-
-                // Create blue to red gradient based on speed
-                let color;
-                if (intensity < 0.3) {
-                    // Low speed: Red
-                    color = `rgba(255, 0, 0, ${alpha})`;
-                } else if (intensity < 0.6) {
-                    // Medium speed: Yellow  
-                    color = `rgba(255, 255, 0, ${alpha})`;
-                } else {
-                    // High speed: Green
-                    color = `rgba(0, 255, 0, ${alpha})`;
-                }
-
-                return new Style({
-                    image: new Circle({
-                        radius: 3 + intensity * 5,
-                        fill: new Fill({
-                            color: color,
-                        }),
-                        stroke: new Stroke({
-                            color: "#ffffff",
-                            width: 1,
-                        }),
-                    }),
-                });
-            },
-        });
-
-        // Acceleration dots layer (green)
-        const accelerationDotsLayer = new VectorLayer({
-            source: accelerationDotsSource,
-            style: (feature) => {
-                const intensity = feature.get('intensity') || 0;
-                const alpha = 0.3 + intensity * 0.7;
-                return new Style({
-                    image: new Circle({
-                        radius: 4 + intensity * 4,
-                        fill: new Fill({
-                            color: `rgba(0, 255, 136, ${alpha})`, // Green with variable alpha
-                        }),
-                        stroke: new Stroke({
-                            color: "#ffffff",
-                            width: 1,
-                        }),
-                    }),
-                });
-            },
         });
 
         const selectedMarkerLayer = new VectorLayer({
@@ -153,8 +139,6 @@ export default function EnhancedGPSTrackMap({
             layers: [
                 baseLayer,
                 racingLineLayer,
-                speedDotsLayer,
-                accelerationDotsLayer,
                 selectedMarkerLayer,
             ],
             view: new View({
@@ -165,7 +149,7 @@ export default function EnhancedGPSTrackMap({
             }),
         });
 
-        // Add click handler for dots
+        // Add click handler for line segments
         map.on('click', (event) => {
             const features = map.getFeaturesAtPixel(event.pixel);
             if (features.length > 0) {
@@ -178,8 +162,7 @@ export default function EnhancedGPSTrackMap({
         });
 
         mapInstanceRef.current = map;
-
-        console.log('Enhanced 2D track map initialized');
+        console.log('Enhanced 2D track map initialized with', mapTheme, 'theme');
 
         return () => {
             if (mapInstanceRef.current) {
@@ -187,109 +170,127 @@ export default function EnhancedGPSTrackMap({
                 mapInstanceRef.current = null;
             }
             racingLineSourceRef.current = null;
-            speedDotsSourceRef.current = null;
-            accelerationDotsSourceRef.current = null;
             selectedMarkerSourceRef.current = null;
+            baseLayerRef.current = null;
+            mapFittedRef.current = false;
+            lastDataHashRef.current = "";
         };
-    }, [onPointClick]);
+    }, [onPointClick, mapTheme]); // Include mapTheme in dependencies
 
-    // Update track data
+    // Update map theme when changed
     useEffect(() => {
-        if (!mapInstanceRef.current || !dataWithCoordinates.length) {
+        if (!mapInstanceRef.current || !baseLayerRef.current) return;
+
+        const newSource = new XYZ({
+            url: MAP_THEMES[mapTheme].url,
+            attributions: MAP_THEMES[mapTheme].attribution
+        });
+
+        baseLayerRef.current.setSource(newSource);
+        console.log('Map theme updated to:', mapTheme);
+    }, [mapTheme]);
+
+    // Get color based on metric value (enhanced for dark theme visibility)
+    const getColorForValue = useCallback((value: number, metric: string, minVal: number, maxVal: number): string => {
+        if (!value || minVal === maxVal) return "#888888";
+
+        const normalized = (value - minVal) / (maxVal - minVal);
+
+        switch (metric) {
+            case "Speed":
+                // Enhanced visibility on dark backgrounds
+                if (normalized < 0.3) {
+                    // Low speed: Bright Red
+                    return `rgb(255, ${Math.round(100 * normalized)}, 0)`;
+                } else if (normalized < 0.7) {
+                    // Medium speed: Bright Yellow/Orange
+                    const t = (normalized - 0.3) / 0.4;
+                    return `rgb(255, ${Math.round(155 + 100 * t)}, 0)`;
+                } else {
+                    // High speed: Bright Green
+                    const t = (normalized - 0.7) / 0.3;
+                    return `rgb(${Math.round(255 * (1 - t))}, 255, 0)`;
+                }
+            case "Throttle":
+                // Bright green gradient for visibility
+                return `rgb(0, ${Math.round(150 + 105 * normalized)}, 0)`;
+            case "Brake":
+                // Bright red gradient
+                return `rgb(${Math.round(150 + 105 * normalized)}, 0, 0)`;
+            case "RPM":
+                // Cyan to Magenta for visibility on dark
+                return `rgb(${Math.round(255 * normalized)}, ${Math.round(100 + 155 * (1 - normalized))}, 255)`;
+            case "SteeringWheelAngle":
+                // Bright purple gradient
+                const absNormalized = Math.abs(normalized - 0.5) * 2;
+                return `rgb(${Math.round(150 + 105 * absNormalized)}, 0, ${Math.round(150 + 105 * absNormalized)})`;
+            default:
+                // Default bright gradient for dark theme
+                return `rgb(${Math.round(100 + 155 * normalized)}, ${Math.round(100 + 155 * (1 - normalized))}, 255)`;
+        }
+    }, []);
+
+    // Update racing line only when data actually changes
+    useEffect(() => {
+        if (!mapInstanceRef.current || !processedTrackData || !racingLineSourceRef.current) return;
+
+        const { validGPSPoints, lineCoordinates, dataHash } = processedTrackData;
+
+        // Skip update if data hasn't actually changed
+        if (dataHash === lastDataHashRef.current) {
             return;
         }
 
-        if (!racingLineSourceRef.current || !speedDotsSourceRef.current || !accelerationDotsSourceRef.current) {
-            return;
-        }
+        console.log('Updating racing line with', validGPSPoints.length, 'points');
 
-        console.log('Updating enhanced track with', dataWithCoordinates.length, 'points');
-
-        // Clear previous data
         racingLineSourceRef.current.clear();
-        speedDotsSourceRef.current.clear();
-        accelerationDotsSourceRef.current.clear();
 
         try {
-            // Filter valid GPS points
-            const validGPSPoints = dataWithCoordinates.filter(
-                (point) => point.Lat && point.Lon && point.Lat !== 0 && point.Lon !== 0,
-            );
+            // Get metric values for color mapping
+            const metricValues = validGPSPoints.map((point: any) => {
+                const value = point[selectedMetric];
+                return typeof value === 'number' ? value : 0;
+            });
 
-            if (validGPSPoints.length === 0) {
-                console.warn("No valid GPS coordinates found");
-                return;
-            }
+            const minVal = Math.min(...metricValues);
+            const maxVal = Math.max(...metricValues);
 
-            // Create racing line
-            if (showRacingLine) {
-                const lineCoordinates = validGPSPoints.map((point) =>
+            // Create colored line segments with enhanced width for visibility
+            for (let i = 0; i < validGPSPoints.length - 1; i++) {
+                const point = validGPSPoints[i];
+                const nextPoint = validGPSPoints[i + 1];
+
+                const segmentCoords = [
                     fromLonLat([point.Lon, point.Lat]),
-                );
+                    fromLonLat([nextPoint.Lon, nextPoint.Lat]),
+                ];
 
-                const lineFeature = new Feature({
-                    geometry: new LineString(lineCoordinates),
+                const segmentFeature = new Feature({
+                    geometry: new LineString(segmentCoords),
                 });
 
-                racingLineSourceRef.current.addFeature(lineFeature);
-            }
+                // Get metric value for coloring
+                const metricValue = (point as any)[selectedMetric] || 0;
+                const color = getColorForValue(metricValue, selectedMetric, minVal, maxVal);
 
-            // Create speed dots (blue) - sample every few points to avoid overcrowding
-            if (showSpeedDots) {
-                const speedSampleRate = Math.max(1, Math.floor(validGPSPoints.length / 100));
-                for (let i = 0; i < validGPSPoints.length; i += speedSampleRate) {
-                    const point = validGPSPoints[i];
-                    if (!point.normalizedSpeed) continue;
-
-                    const dotFeature = new Feature({
-                        geometry: new Point(fromLonLat([point.Lon, point.Lat])),
-                    });
-
-                    dotFeature.setProperties({
-                        intensity: point.normalizedSpeed,
-                        originalIndex: point.originalIndex || i,
-                        type: 'speed',
-                        value: point.Speed,
-                    });
-
-                    speedDotsSourceRef.current.addFeature(dotFeature);
-                }
-            }
-
-            // Create acceleration dots (green) - focus on high lateral G areas
-            if (showAccelerationDots) {
-                // Use real iRacing lateral acceleration data
-                const gThreshold = 2.0; // Show points above 2 m/s² lateral acceleration
-                const highGPoints = validGPSPoints.filter(
-                    point => Math.abs(point.lateralAccel || 0) > gThreshold
+                segmentFeature.setStyle(
+                    new Style({
+                        stroke: new Stroke({
+                            color: color,
+                            width: 5, // Increased width for better visibility on dark theme
+                        }),
+                    }),
                 );
 
-                for (const point of highGPoints) {
-                    const dotFeature = new Feature({
-                        geometry: new Point(fromLonLat([point.Lon, point.Lat])),
-                    });
+                // Store original index for click handling
+                segmentFeature.set('originalIndex', point.originalIndex || i);
+                segmentFeature.set('metricValue', metricValue);
 
-                    // Normalize lateral G for visualization (0-1 range)
-                    const lateralG = Math.abs(point.lateralAccel || 0);
-                    const normalizedG = Math.min(lateralG / 10.0, 1.0); // Scale to reasonable max
-
-                    dotFeature.setProperties({
-                        intensity: normalizedG,
-                        originalIndex: point.originalIndex || 0,
-                        type: 'acceleration',
-                        value: lateralG,
-                        gForce: (lateralG / 9.81).toFixed(2) + 'g', // Convert to G-force
-                    });
-
-                    accelerationDotsSourceRef.current.addFeature(dotFeature);
-                }
+                racingLineSourceRef.current.addFeature(segmentFeature);
             }
 
-            // Fit view to track
-            if (!isScrubbing && showRacingLine) {
-                const lineCoordinates = validGPSPoints.map((point) =>
-                    fromLonLat([point.Lon, point.Lat]),
-                );
+            // Fit view to track only once or when explicitly needed
+            if (!mapFittedRef.current && !isScrubbing && lineCoordinates.length > 0) {
                 const lineFeature = new Feature({
                     geometry: new LineString(lineCoordinates),
                 });
@@ -301,20 +302,20 @@ export default function EnhancedGPSTrackMap({
                         duration: 1000,
                         maxZoom: 18,
                     });
+                    mapFittedRef.current = true;
                 }
             }
 
-            console.log('Enhanced track updated successfully');
+            lastDataHashRef.current = dataHash;
+            console.log('Racing line updated successfully with', selectedMetric, 'coloring');
         } catch (error) {
-            console.error("Error updating enhanced track:", error);
+            console.error("Error updating racing line:", error);
         }
-    }, [dataWithCoordinates, isScrubbing, showSpeedDots, showAccelerationDots, showRacingLine]);
+    }, [processedTrackData, selectedMetric, getColorForValue, isScrubbing]);
 
-    // Update selected marker
+    // Update selected marker (this should be frequent but lightweight)
     useEffect(() => {
-        if (!selectedMarkerSourceRef.current || !dataWithCoordinates.length) {
-            return;
-        }
+        if (!selectedMarkerSourceRef.current || !dataWithCoordinates.length) return;
 
         selectedMarkerSourceRef.current.clear();
 
@@ -332,31 +333,36 @@ export default function EnhancedGPSTrackMap({
                 geometry: new Point(markerCoords),
             });
 
-            const displayText = `${selectedPoint.LapDistPct.toFixed(1)}% - ${selectedPoint.Speed.toFixed(1)}kph`;
+            const metricValue = (selectedPoint as any)[selectedMetric] || 0;
+            const displayText = `${selectedPoint.LapDistPct.toFixed(1)}% - ${selectedMetric}: ${metricValue.toFixed(1)}`;
 
             markerFeature.setStyle(
                 new Style({
                     image: new Circle({
-                        radius: 12,
+                        radius: 14, // Slightly larger for dark theme
                         fill: new Fill({
                             color: "#ffff00",
                         }),
                         stroke: new Stroke({
-                            color: "#000000",
-                            width: 3,
+                            color: "#ffffff", // White border for dark theme
+                            width: 2,
                         }),
                     }),
                     text: new Text({
                         text: displayText,
                         offsetY: -25,
-                        font: "14px sans-serif",
+                        font: "bold 14px sans-serif",
                         fill: new Fill({
-                            color: "#ffffff",
+                            color: "#ffffff", // White text
                         }),
                         stroke: new Stroke({
                             color: "#000000",
                             width: 3,
                         }),
+                        backgroundFill: new Fill({
+                            color: "rgba(0, 0, 0, 0.7)", // Semi-transparent black background
+                        }),
+                        padding: [2, 4, 2, 4],
                     }),
                 }),
             );
@@ -371,9 +377,9 @@ export default function EnhancedGPSTrackMap({
                 });
             }
         }
-    }, [selectedPointIndex, dataWithCoordinates, isScrubbing]);
+    }, [selectedPointIndex, dataWithCoordinates, isScrubbing, selectedMetric]);
 
-    const handleZoomIn = (): void => {
+    const handleZoomIn = useCallback((): void => {
         if (mapInstanceRef.current) {
             const view = mapInstanceRef.current.getView();
             view.animate({
@@ -381,9 +387,9 @@ export default function EnhancedGPSTrackMap({
                 duration: 250,
             });
         }
-    };
+    }, []);
 
-    const handleZoomOut = (): void => {
+    const handleZoomOut = useCallback((): void => {
         if (mapInstanceRef.current) {
             const view = mapInstanceRef.current.getView();
             view.animate({
@@ -391,96 +397,146 @@ export default function EnhancedGPSTrackMap({
                 duration: 250,
             });
         }
-    };
+    }, []);
+
+    // Get legend info based on selected metric
+    const getLegendInfo = useCallback(() => {
+        switch (selectedMetric) {
+            case "Speed":
+                return {
+                    title: "Speed (km/h)",
+                    colors: [
+                        { color: "#FF6400", label: "Low Speed" },
+                        { color: "#FFFF00", label: "Medium Speed" },
+                        { color: "#00FF00", label: "High Speed" },
+                    ]
+                };
+            case "Throttle":
+                return {
+                    title: "Throttle (%)",
+                    colors: [
+                        { color: "#009600", label: "0% Throttle" },
+                        { color: "#00FF00", label: "100% Throttle" },
+                    ]
+                };
+            case "Brake":
+                return {
+                    title: "Brake (%)",
+                    colors: [
+                        { color: "#960000", label: "0% Brake" },
+                        { color: "#FF0000", label: "100% Brake" },
+                    ]
+                };
+            case "RPM":
+                return {
+                    title: "Engine RPM",
+                    colors: [
+                        { color: "#64C8FF", label: "Low RPM" },
+                        { color: "#FF64FF", label: "High RPM" },
+                    ]
+                };
+            case "SteeringWheelAngle":
+                return {
+                    title: "Steering Angle",
+                    colors: [
+                        { color: "#888888", label: "Straight" },
+                        { color: "#FF96FF", label: "Full Lock" },
+                    ]
+                };
+            default:
+                return {
+                    title: selectedMetric,
+                    colors: [
+                        { color: "#6496FF", label: "Low Value" },
+                        { color: "#FF6496", label: "High Value" },
+                    ]
+                };
+        }
+    }, [selectedMetric]);
+
+    const legendInfo = getLegendInfo();
 
     return (
-        <div className="h-[500px] bg-gray-800 rounded-lg relative">
+        <div className="h-[500px] bg-gray-900 rounded-lg relative">
             {/* Zoom Controls */}
             <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
                 <button
                     onClick={handleZoomIn}
-                    className="bg-gray-700 hover:bg-gray-600 text-white w-8 h-8 flex items-center justify-center rounded shadow"
+                    className="bg-gray-800 hover:bg-gray-700 text-white w-8 h-8 flex items-center justify-center rounded shadow border border-gray-600"
                     aria-label="Zoom in"
                 >
                     +
                 </button>
                 <button
                     onClick={handleZoomOut}
-                    className="bg-gray-700 hover:bg-gray-600 text-white w-8 h-8 flex items-center justify-center rounded shadow"
+                    className="bg-gray-800 hover:bg-gray-700 text-white w-8 h-8 flex items-center justify-center rounded shadow border border-gray-600"
                     aria-label="Zoom out"
                 >
                     -
                 </button>
             </div>
 
-            {/* Layer Controls */}
-            <div className="absolute top-2 right-2 z-10 bg-gray-700 bg-opacity-90 p-3 rounded text-white text-xs">
-                <div className="mb-2 font-semibold">Layer Controls</div>
+            {/* Theme Selector */}
+            <div className="absolute top-2 left-12 z-10">
+                <button
+                    onClick={() => setShowThemeSelector(!showThemeSelector)}
+                    className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-1 rounded shadow border border-gray-600 text-xs"
+                >
+                    🎨 {MAP_THEMES[mapTheme].name}
+                </button>
 
-                <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={showRacingLine}
-                        onChange={(e) => setShowRacingLine(e.target.checked)}
-                        className="rounded"
-                    />
-                    <div className="w-4 h-1 bg-white"></div>
-                    <span>Racing Line</span>
-                </label>
-
-                <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={showSpeedDots}
-                        onChange={(e) => setShowSpeedDots(e.target.checked)}
-                        className="rounded"
-                    />
-                    <div className="w-4 h-4 bg-blue-400 rounded-full"></div>
-                    <span>Speed Data</span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={showAccelerationDots}
-                        onChange={(e) => setShowAccelerationDots(e.target.checked)}
-                        className="rounded"
-                    />
-                    <div className="w-4 h-4 bg-green-400 rounded-full"></div>
-                    <span>Lateral G-Force ({">"}2 m/s²)</span>
-                </label>
+                {showThemeSelector && (
+                    <div className="absolute top-8 left-0 bg-gray-800 border border-gray-600 rounded shadow-lg p-2 min-w-48">
+                        {Object.entries(MAP_THEMES).map(([key, theme]) => (
+                            <button
+                                key={key}
+                                onClick={() => {
+                                    setMapTheme(key as keyof typeof MAP_THEMES);
+                                    setShowThemeSelector(false);
+                                }}
+                                className={`block w-full text-left px-2 py-1 text-xs rounded mb-1 ${mapTheme === key
+                                    ? 'bg-blue-600 text-white'
+                                    : 'text-gray-300 hover:bg-gray-700'
+                                    }`}
+                            >
+                                <div className="font-medium">{theme.name}</div>
+                                <div className="text-gray-400 text-xs">{theme.description}</div>
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
 
-            {/* Legend */}
-            <div className="absolute bottom-2 right-2 z-10 bg-gray-700 bg-opacity-90 p-2 rounded text-white text-xs">
-                <div className="flex items-center gap-2 mb-1">
-                    <div className="w-4 h-4 bg-blue-400 rounded-full"></div>
-                    <span>Higher Speed</span>
-                </div>
-                <div className="flex items-center gap-2 mb-1">
-                    <div className="w-4 h-4 bg-green-400 rounded-full"></div>
-                    <span>High Lateral G ({">"}2 m/s²)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-yellow-400 rounded-full"></div>
-                    <span>Selected Point</span>
-                </div>
-                <div className="text-gray-300 mt-1 text-xs">
-                    Click dots to select • Real iRacing sensors
+            {/* Dynamic Legend based on selected metric */}
+            <div className="absolute top-2 right-2 z-10 bg-gray-800 bg-opacity-95 border border-gray-600 p-3 rounded text-white text-xs">
+                <div className="mb-2 font-semibold">{legendInfo.title}</div>
+                {legendInfo.colors.map((item, index) => (
+                    <div key={index} className="flex items-center gap-2 mb-1">
+                        <div
+                            className="w-4 h-2 border border-gray-500"
+                            style={{ backgroundColor: item.color }}
+                        ></div>
+                        <span>{item.label}</span>
+                    </div>
+                ))}
+                <div className="text-gray-300 mt-2 text-xs border-t border-gray-600 pt-2">
+                    Click line to select point<br />
+                    Enhanced for dark theme
                 </div>
             </div>
 
             {/* Debug info */}
-            <div className="absolute bottom-2 left-2 z-10 bg-gray-700 bg-opacity-90 p-2 rounded text-white text-xs">
+            <div className="absolute bottom-2 left-2 z-10 bg-gray-800 bg-opacity-95 border border-gray-600 p-2 rounded text-white text-xs">
                 <div>GPS Points: {dataWithCoordinates.length}</div>
-                <div>Speed Dots: {showSpeedDots ? 'ON' : 'OFF'}</div>
-                <div>Accel Dots: {showAccelerationDots ? 'ON' : 'OFF'}</div>
+                <div>Metric: {selectedMetric}</div>
+                <div>Theme: {MAP_THEMES[mapTheme].name}</div>
+                <div>Selected: {selectedPointIndex >= 0 ? selectedPointIndex : 'None'}</div>
             </div>
 
             {/* Map container */}
             <div
                 ref={mapRef}
-                className="w-full h-full"
+                className="w-full h-full rounded-lg overflow-hidden"
                 style={{
                     width: '100%',
                     height: '100%',
