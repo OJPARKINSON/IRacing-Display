@@ -11,7 +11,6 @@ import {
 	LucideIcon,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-// import tracks from "../../lib/tracks.json";
 
 const Globe = dynamic(() => import("react-globe.gl"), {
 	ssr: false,
