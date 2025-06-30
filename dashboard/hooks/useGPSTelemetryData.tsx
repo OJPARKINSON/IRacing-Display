@@ -19,7 +19,6 @@ export function useGPSTelemetryData(
 		}
 
 		try {
-			// Filter out points with invalid GPS coordinates
 			const validGPSData = telemetry.filter(
 				(point) =>
 					point.Lat &&
@@ -35,7 +34,6 @@ export function useGPSTelemetryData(
 				return [];
 			}
 
-			// Calculate track bounds
 			const lats = validGPSData.map((p) => p.Lat);
 			const lons = validGPSData.map((p) => p.Lon);
 
@@ -48,9 +46,7 @@ export function useGPSTelemetryData(
 
 			setTrackBounds(bounds);
 
-			// Process and enhance the telemetry data
 			const processedData = validGPSData.map((point, index) => {
-				// Calculate distance from previous point
 				let distanceFromPrev = 0;
 				if (index > 0) {
 					const prevPoint = validGPSData[index - 1];
@@ -62,7 +58,6 @@ export function useGPSTelemetryData(
 					);
 				}
 
-				// Calculate speed from GPS if velocity data is missing
 				let calculatedSpeed = point.Speed;
 				if (
 					!calculatedSpeed &&
@@ -73,11 +68,10 @@ export function useGPSTelemetryData(
 					const timeDiff =
 						point.session_time - validGPSData[index - 1].session_time;
 					if (timeDiff > 0) {
-						calculatedSpeed = (distanceFromPrev / timeDiff) * 3.6; // Convert m/s to km/h
+						calculatedSpeed = (distanceFromPrev / timeDiff) * 3.6;
 					}
 				}
 
-				// Calculate heading/bearing if velocity data is missing
 				let heading = 0;
 				if (index > 0) {
 					const prevPoint = validGPSData[index - 1];
@@ -99,10 +93,8 @@ export function useGPSTelemetryData(
 				};
 			});
 
-			// Smooth the data to remove GPS noise
 			const smoothedData = smoothGPSData(processedData);
 
-			// Detect corners and straights based on GPS data
 			const dataWithSections = detectTrackSections(smoothedData);
 
 			return dataWithSections;
@@ -120,14 +112,13 @@ export function useGPSTelemetryData(
 	};
 }
 
-// Calculate distance between two GPS points using Haversine formula
 function calculateGPSDistance(
 	lat1: number,
 	lon1: number,
 	lat2: number,
 	lon2: number,
 ): number {
-	const R = 6371000; // Earth's radius in meters
+	const R = 6371000;
 	const dLat = ((lat2 - lat1) * Math.PI) / 180;
 	const dLon = ((lon2 - lon1) * Math.PI) / 180;
 	const a =
@@ -140,7 +131,6 @@ function calculateGPSDistance(
 	return R * c;
 }
 
-// Calculate bearing between two GPS points
 function calculateBearing(
 	lat1: number,
 	lon1: number,
@@ -157,12 +147,11 @@ function calculateBearing(
 		Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
 
 	const bearing = (Math.atan2(y, x) * 180) / Math.PI;
-	return (bearing + 360) % 360; // Normalize to 0-360
+	return (bearing + 360) % 360;
 }
 
-// Smooth GPS data to reduce noise
 function smoothGPSData(data: any[]): any[] {
-	const windowSize = 5; // Number of points to average
+	const windowSize = 5;
 
 	return data.map((point, index) => {
 		const start = Math.max(0, index - Math.floor(windowSize / 2));
@@ -170,11 +159,9 @@ function smoothGPSData(data: any[]): any[] {
 
 		const window = data.slice(start, end);
 
-		// Smooth latitude and longitude
 		const avgLat = window.reduce((sum, p) => sum + p.Lat, 0) / window.length;
 		const avgLon = window.reduce((sum, p) => sum + p.Lon, 0) / window.length;
 
-		// Smooth speed if available
 		const speeds = window.filter((p) => p.Speed).map((p) => p.Speed);
 		const avgSpeed =
 			speeds.length > 0
@@ -183,38 +170,33 @@ function smoothGPSData(data: any[]): any[] {
 
 		return {
 			...point,
-			Lat: index < 2 || index > data.length - 3 ? point.Lat : avgLat, // Don't smooth start/end points
+			Lat: index < 2 || index > data.length - 3 ? point.Lat : avgLat,
 			Lon: index < 2 || index > data.length - 3 ? point.Lon : avgLon,
 			Speed: avgSpeed,
 		};
 	});
 }
 
-// Detect corners and straights based on GPS data
 function detectTrackSections(data: any[]): any[] {
 	return data.map((point, index) => {
 		let sectionType = "straight";
 		let turnRadius = 0;
 
 		if (index >= 2 && index < data.length - 2) {
-			// Calculate change in heading over a small window
 			const prevHeading = data[index - 2].heading;
 			const nextHeading = data[index + 2].heading;
 
 			let headingChange = Math.abs(nextHeading - prevHeading);
 			if (headingChange > 180) {
-				headingChange = 360 - headingChange; // Handle wraparound
+				headingChange = 360 - headingChange;
 			}
 
-			// Classify based on heading change and speed
 			if (headingChange > 15) {
-				// Significant direction change
 				sectionType = "corner";
 
-				// Estimate turn radius based on speed and heading change
 				const avgSpeed = point.Speed || 0;
 				if (avgSpeed > 0 && headingChange > 0) {
-					const timeWindow = 4; // Assume 4 data points = some time interval
+					const timeWindow = 4;
 					turnRadius =
 						(avgSpeed * timeWindow) / ((headingChange * Math.PI) / 180);
 				}
@@ -231,7 +213,6 @@ function detectTrackSections(data: any[]): any[] {
 	});
 }
 
-// Helper function to get track boundaries from OpenStreetMap
 export async function fetchTrackBoundaries(
 	trackName: string,
 	bounds: {
@@ -242,7 +223,6 @@ export async function fetchTrackBoundaries(
 	},
 ) {
 	try {
-		// Overpass API query to get track boundaries
 		const overpassQuery = `
       [out:json][timeout:25];
       [bbox:${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon}];
@@ -267,7 +247,6 @@ export async function fetchTrackBoundaries(
 
 		const data = await response.json();
 
-		// Process the track boundary data
 		const trackFeatures = data.elements
 			.filter((element: any) => element.type === "way" && element.geometry)
 			.map((element: any) => ({
@@ -283,7 +262,6 @@ export async function fetchTrackBoundaries(
 	}
 }
 
-// Alternative: Create approximate track boundaries from telemetry
 export function createApproximateTrackBoundaries(
 	telemetryData: TelemetryDataPoint[],
 	trackWidth: number = 15, // meters
@@ -295,7 +273,6 @@ export function createApproximateTrackBoundaries(
 		const point = telemetryData[i];
 		const nextPoint = telemetryData[(i + 1) % telemetryData.length];
 
-		// Calculate perpendicular direction
 		const bearing = calculateBearing(
 			point.Lat,
 			point.Lon,
@@ -305,7 +282,6 @@ export function createApproximateTrackBoundaries(
 		const perpBearing1 = (bearing + 90) % 360;
 		const perpBearing2 = (bearing - 90) % 360;
 
-		// Calculate outer and inner boundary points
 		const outerPoint = calculateDestinationPoint(
 			point.Lat,
 			point.Lon,
@@ -326,14 +302,13 @@ export function createApproximateTrackBoundaries(
 	return { outer, inner };
 }
 
-// Calculate destination point given start point, bearing, and distance
 function calculateDestinationPoint(
 	lat: number,
 	lon: number,
 	bearing: number,
 	distance: number,
 ) {
-	const R = 6371000; // Earth's radius in meters
+	const R = 6371000;
 	const bearingRad = (bearing * Math.PI) / 180;
 	const latRad = (lat * Math.PI) / 180;
 	const lonRad = (lon * Math.PI) / 180;

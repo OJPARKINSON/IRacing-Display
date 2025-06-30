@@ -23,7 +23,6 @@ export default function TrackView({
     selectedMetric = "Speed",
 }: TrackViewProps) {
 
-    // Calculate some stats for display
     const speedRange = dataWithCoordinates.length > 0 ? {
         min: Math.min(...dataWithCoordinates.map(p => p.Speed)),
         max: Math.max(...dataWithCoordinates.map(p => p.Speed))
@@ -45,7 +44,7 @@ export default function TrackView({
                             isScrubbing={isScrubbing}
                             getTrackDisplayPoint={getTrackDisplayPoint}
                             onPointClick={onPointClick}
-                            selectedMetric={selectedMetric} // Pass the selected metric
+                            selectedMetric={selectedMetric}
                         />
                     </div>
                 ) : (
@@ -62,7 +61,6 @@ export default function TrackView({
                 )}
             </div>
 
-            {/* Data Quality Information */}
             {dataWithCoordinates.length > 0 && (
                 <div className="p-4 border-t border-gray-700 bg-gray-850">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -99,7 +97,6 @@ export default function TrackView({
                         </div>
                     </div>
 
-                    {/* Sensor Data Status */}
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
                         {hasRealSensorData ? (
                             <>

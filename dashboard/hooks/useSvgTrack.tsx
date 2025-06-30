@@ -19,7 +19,6 @@ export function useSvgTrack() {
 
 				const svgText = await response.text();
 
-				// Parse SVG to extract path data
 				const parser = new DOMParser();
 				const svgDoc = parser.parseFromString(svgText, "image/svg+xml");
 				const pathElement = svgDoc.getElementById(

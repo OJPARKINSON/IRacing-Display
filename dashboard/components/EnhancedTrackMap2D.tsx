@@ -23,7 +23,6 @@ interface TrackMapProps {
     selectedMetric?: string;
 }
 
-// Map theme configurations
 const MAP_THEMES = {
     dark: {
         name: "Dark",
@@ -52,28 +51,22 @@ export default function EnhancedGPSTrackMap({
     const selectedMarkerSourceRef = useRef<VectorSource | null>(null);
     const baseLayerRef = useRef<TileLayer<XYZ> | null>(null);
 
-    // Map theme state
     const [mapTheme, setMapTheme] = useState<keyof typeof MAP_THEMES>('dark');
     const [showThemeSelector, setShowThemeSelector] = useState(false);
 
-    // Track if map has been fitted to avoid refitting on every render
     const mapFittedRef = useRef(false);
 
-    // Track the last processed data to avoid unnecessary updates
     const lastDataHashRef = useRef<string>("");
 
-    // Memoize processed data to prevent unnecessary recalculations
     const processedTrackData = useMemo(() => {
         if (!dataWithCoordinates?.length) return null;
 
-        // Filter valid GPS points
         const validGPSPoints = dataWithCoordinates.filter(
             (point) => point.Lat && point.Lon && point.Lat !== 0 && point.Lon !== 0,
         );
 
         if (validGPSPoints.length === 0) return null;
 
-        // Create hash of data to detect changes
         const dataHash = JSON.stringify(validGPSPoints.map(p => ({
             lat: p.Lat,
             lon: p.Lon,
@@ -90,21 +83,17 @@ export default function EnhancedGPSTrackMap({
         };
     }, [dataWithCoordinates]);
 
-    // Initialize map only once
     useEffect(() => {
         if (!mapRef.current || mapInstanceRef.current) return;
 
         console.log('Initializing enhanced 2D track map with dark theme...');
 
-        // Create sources
         const racingLineSource = new VectorSource();
         const selectedMarkerSource = new VectorSource();
 
-        // Store refs
         racingLineSourceRef.current = racingLineSource;
         selectedMarkerSourceRef.current = selectedMarkerSource;
 
-        // Create base layer with initial theme
         const baseLayer = new TileLayer({
             source: new XYZ({
                 url: MAP_THEMES[mapTheme].url,
@@ -133,7 +122,6 @@ export default function EnhancedGPSTrackMap({
             }),
         });
 
-        // Create map
         const map = new Map({
             target: mapRef.current,
             layers: [
@@ -142,14 +130,13 @@ export default function EnhancedGPSTrackMap({
                 selectedMarkerLayer,
             ],
             view: new View({
-                center: fromLonLat([9.2808, 45.6162]), // Monza coordinates
+                center: fromLonLat([9.2808, 45.6162]),
                 zoom: 15,
                 maxZoom: 20,
                 minZoom: 5,
             }),
         });
 
-        // Add click handler for line segments
         map.on('click', (event) => {
             const features = map.getFeaturesAtPixel(event.pixel);
             if (features.length > 0) {
@@ -175,9 +162,8 @@ export default function EnhancedGPSTrackMap({
             mapFittedRef.current = false;
             lastDataHashRef.current = "";
         };
-    }, [onPointClick, mapTheme]); // Include mapTheme in dependencies
+    }, [onPointClick, mapTheme]);
 
-    // Update map theme when changed
     useEffect(() => {
         if (!mapInstanceRef.current || !baseLayerRef.current) return;
 
@@ -190,7 +176,6 @@ export default function EnhancedGPSTrackMap({
         console.log('Map theme updated to:', mapTheme);
     }, [mapTheme]);
 
-    // Get color based on metric value (enhanced for dark theme visibility)
     const getColorForValue = useCallback((value: number, metric: string, minVal: number, maxVal: number): string => {
         if (!value || minVal === maxVal) return "#888888";
 
@@ -198,45 +183,34 @@ export default function EnhancedGPSTrackMap({
 
         switch (metric) {
             case "Speed":
-                // Enhanced visibility on dark backgrounds
                 if (normalized < 0.3) {
-                    // Low speed: Bright Red
                     return `rgb(255, ${Math.round(100 * normalized)}, 0)`;
                 } else if (normalized < 0.7) {
-                    // Medium speed: Bright Yellow/Orange
                     const t = (normalized - 0.3) / 0.4;
                     return `rgb(255, ${Math.round(155 + 100 * t)}, 0)`;
                 } else {
-                    // High speed: Bright Green
                     const t = (normalized - 0.7) / 0.3;
                     return `rgb(${Math.round(255 * (1 - t))}, 255, 0)`;
                 }
             case "Throttle":
-                // Bright green gradient for visibility
                 return `rgb(0, ${Math.round(150 + 105 * normalized)}, 0)`;
             case "Brake":
-                // Bright red gradient
                 return `rgb(${Math.round(150 + 105 * normalized)}, 0, 0)`;
             case "RPM":
-                // Cyan to Magenta for visibility on dark
                 return `rgb(${Math.round(255 * normalized)}, ${Math.round(100 + 155 * (1 - normalized))}, 255)`;
             case "SteeringWheelAngle":
-                // Bright purple gradient
                 const absNormalized = Math.abs(normalized - 0.5) * 2;
                 return `rgb(${Math.round(150 + 105 * absNormalized)}, 0, ${Math.round(150 + 105 * absNormalized)})`;
             default:
-                // Default bright gradient for dark theme
                 return `rgb(${Math.round(100 + 155 * normalized)}, ${Math.round(100 + 155 * (1 - normalized))}, 255)`;
         }
     }, []);
 
-    // Update racing line only when data actually changes
     useEffect(() => {
         if (!mapInstanceRef.current || !processedTrackData || !racingLineSourceRef.current) return;
 
         const { validGPSPoints, lineCoordinates, dataHash } = processedTrackData;
 
-        // Skip update if data hasn't actually changed
         if (dataHash === lastDataHashRef.current) {
             return;
         }
@@ -246,7 +220,6 @@ export default function EnhancedGPSTrackMap({
         racingLineSourceRef.current.clear();
 
         try {
-            // Get metric values for color mapping
             const metricValues = validGPSPoints.map((point: any) => {
                 const value = point[selectedMetric];
                 return typeof value === 'number' ? value : 0;
@@ -255,7 +228,6 @@ export default function EnhancedGPSTrackMap({
             const minVal = Math.min(...metricValues);
             const maxVal = Math.max(...metricValues);
 
-            // Create colored line segments with enhanced width for visibility
             for (let i = 0; i < validGPSPoints.length - 1; i++) {
                 const point = validGPSPoints[i];
                 const nextPoint = validGPSPoints[i + 1];
@@ -269,7 +241,6 @@ export default function EnhancedGPSTrackMap({
                     geometry: new LineString(segmentCoords),
                 });
 
-                // Get metric value for coloring
                 const metricValue = (point as any)[selectedMetric] || 0;
                 const color = getColorForValue(metricValue, selectedMetric, minVal, maxVal);
 
@@ -277,19 +248,17 @@ export default function EnhancedGPSTrackMap({
                     new Style({
                         stroke: new Stroke({
                             color: color,
-                            width: 5, // Increased width for better visibility on dark theme
+                            width: 5,
                         }),
                     }),
                 );
 
-                // Store original index for click handling
                 segmentFeature.set('originalIndex', point.originalIndex || i);
                 segmentFeature.set('metricValue', metricValue);
 
                 racingLineSourceRef.current.addFeature(segmentFeature);
             }
 
-            // Fit view to track only once or when explicitly needed
             if (!mapFittedRef.current && !isScrubbing && lineCoordinates.length > 0) {
                 const lineFeature = new Feature({
                     geometry: new LineString(lineCoordinates),
@@ -313,7 +282,6 @@ export default function EnhancedGPSTrackMap({
         }
     }, [processedTrackData, selectedMetric, getColorForValue, isScrubbing]);
 
-    // Update selected marker (this should be frequent but lightweight)
     useEffect(() => {
         if (!selectedMarkerSourceRef.current || !dataWithCoordinates.length) return;
 
@@ -339,12 +307,12 @@ export default function EnhancedGPSTrackMap({
             markerFeature.setStyle(
                 new Style({
                     image: new Circle({
-                        radius: 14, // Slightly larger for dark theme
+                        radius: 14,
                         fill: new Fill({
                             color: "#ffff00",
                         }),
                         stroke: new Stroke({
-                            color: "#ffffff", // White border for dark theme
+                            color: "#ffffff",
                             width: 2,
                         }),
                     }),
@@ -353,14 +321,14 @@ export default function EnhancedGPSTrackMap({
                         offsetY: -25,
                         font: "bold 14px sans-serif",
                         fill: new Fill({
-                            color: "#ffffff", // White text
+                            color: "#ffffff",
                         }),
                         stroke: new Stroke({
                             color: "#000000",
                             width: 3,
                         }),
                         backgroundFill: new Fill({
-                            color: "rgba(0, 0, 0, 0.7)", // Semi-transparent black background
+                            color: "rgba(0, 0, 0, 0.7)",
                         }),
                         padding: [2, 4, 2, 4],
                     }),
@@ -369,7 +337,6 @@ export default function EnhancedGPSTrackMap({
 
             selectedMarkerSourceRef.current.addFeature(markerFeature);
 
-            // Center map on selected point when scrubbing
             if (isScrubbing && mapInstanceRef.current) {
                 mapInstanceRef.current.getView().animate({
                     center: markerCoords,
@@ -399,7 +366,6 @@ export default function EnhancedGPSTrackMap({
         }
     }, []);
 
-    // Get legend info based on selected metric
     const getLegendInfo = useCallback(() => {
         switch (selectedMetric) {
             case "Speed":
@@ -507,7 +473,6 @@ export default function EnhancedGPSTrackMap({
                 )}
             </div>
 
-            {/* Dynamic Legend based on selected metric */}
             <div className="absolute top-2 right-2 z-10 bg-gray-800 bg-opacity-95 border border-gray-600 p-3 rounded text-white text-xs">
                 <div className="mb-2 font-semibold">{legendInfo.title}</div>
                 {legendInfo.colors.map((item, index) => (
@@ -525,7 +490,6 @@ export default function EnhancedGPSTrackMap({
                 </div>
             </div>
 
-            {/* Debug info */}
             <div className="absolute bottom-2 left-2 z-10 bg-gray-800 bg-opacity-95 border border-gray-600 p-2 rounded text-white text-xs">
                 <div>GPS Points: {dataWithCoordinates.length}</div>
                 <div>Metric: {selectedMetric}</div>
@@ -533,7 +497,6 @@ export default function EnhancedGPSTrackMap({
                 <div>Selected: {selectedPointIndex >= 0 ? selectedPointIndex : 'None'}</div>
             </div>
 
-            {/* Map container */}
             <div
                 ref={mapRef}
                 className="w-full h-full rounded-lg overflow-hidden"
