@@ -13,10 +13,11 @@ import { TelemetryChart, InfoBox } from "@/components/InfoBox";
 import { fetcher, telemetryFetcher } from "../../lib/Fetch";
 import { useGPSTelemetryData } from "../../hooks/useGPSTelemetryData";
 import { useTrackPosition } from "@/hooks/useTrackPosition";
-import GPSTrackMap from "@/components/trackMap";
+// import GPSTrackMap from "@/components/trackMap";
 import { TelemetryDataPoint } from "@/lib/types";
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import TrackViewSwitcher from "@/components/TrackViewSwitcher";
+import TrackViewSwitcher from "@/components/TrackView";
+import TrackView from "@/components/TrackView";
 
 interface Params {
 	params: Promise<{
@@ -148,7 +149,7 @@ export default function TelemetryPage({ params }: Params) {
 			<div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 				{/* GPS Track Map */}
 				<div className="col-span-1 lg:col-span-2 bg-gray-800 p-4 rounded-lg">
-					<h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
+					<h2 className="text-xl font-semibold mb-2 flex items-center gap-2 pb-0">
 						GPS Track Map
 						{trackName && (
 							<span className="text-sm text-gray-400">- {trackName}</span>
@@ -156,7 +157,7 @@ export default function TelemetryPage({ params }: Params) {
 					</h2>
 
 					{dataWithGPSCoordinates.length > 0 ? (
-						<TrackViewSwitcher
+						<TrackView
 							dataWithCoordinates={dataWithGPSCoordinates}
 							selectedPointIndex={selectedIndex}
 							selectedLapPct={selectedLapPct}

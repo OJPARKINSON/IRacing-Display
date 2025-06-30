@@ -80,12 +80,26 @@ export default function EnhancedGPSTrackMap({
             source: speedDotsSource,
             style: (feature) => {
                 const intensity = feature.get('intensity') || 0;
-                const alpha = 0.3 + intensity * 0.7;
+                const alpha = 0.4 + intensity * 0.6;
+
+                // Create blue to red gradient based on speed
+                let color;
+                if (intensity < 0.3) {
+                    // Low speed: Red
+                    color = `rgba(255, 0, 0, ${alpha})`;
+                } else if (intensity < 0.6) {
+                    // Medium speed: Yellow  
+                    color = `rgba(255, 255, 0, ${alpha})`;
+                } else {
+                    // High speed: Green
+                    color = `rgba(0, 255, 0, ${alpha})`;
+                }
+
                 return new Style({
                     image: new Circle({
-                        radius: 4 + intensity * 4,
+                        radius: 3 + intensity * 5,
                         fill: new Fill({
-                            color: `rgba(0, 136, 255, ${alpha})`, // Blue with variable alpha
+                            color: color,
                         }),
                         stroke: new Stroke({
                             color: "#ffffff",
