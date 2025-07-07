@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -155,6 +156,7 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 		trackName := ""
 		if val, ok := record["trackDisplayShortName"]; ok {
 			trackName = fmt.Sprintf("%v", val)
+			trackName = strings.ReplaceAll(trackName, " ", "-")
 		}
 
 		trackID := ""
