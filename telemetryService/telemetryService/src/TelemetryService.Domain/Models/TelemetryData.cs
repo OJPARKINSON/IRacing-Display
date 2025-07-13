@@ -42,8 +42,8 @@ public class TelemetryData
     public double RFpressure { get; set; }
     public double LRpressure { get; set; }
     public double RRpressure { get; set; }
-    public double LFtempCM { get; set; }
-    public double RFtempCM { get; set; }
-    public double LRtempCM { get; set; }
-    public double RRtempCM { get; set; }
+    public double LFtempM { get; set; }
+    public double RFtempM { get; set; }
+    public double LRtempM { get; set; }
+    public double RRtempM { get; set; }
 }
