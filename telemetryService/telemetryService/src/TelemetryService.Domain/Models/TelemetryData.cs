@@ -33,4 +33,17 @@ public class TelemetryData
     public double Roll { get; set; }
     public double Yaw { get; set; }
     public double Yaw_north { get; set; }
+    public double Voltage { get; set; }
+    public double LapLastLapTime { get; set; }
+    public double WaterTemp { get; set; }
+    public double LapDeltaToBestLap { get; set; }
+    public double LapCurrentLapTime { get; set; }
+    public double LFpressure { get; set; }
+    public double RFpressure { get; set; }
+    public double LRpressure { get; set; }
+    public double RRpressure { get; set; }
+    public double LFtempM { get; set; }
+    public double RFtempM { get; set; }
+    public double LRtempM { get; set; }
+    public double RRtempM { get; set; }
 }

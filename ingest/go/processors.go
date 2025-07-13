@@ -66,7 +66,9 @@ func (l *loaderProcessor) Whitelist() []string {
 		"Lap", "LapDistPct", "Speed", "Throttle", "Brake", "Gear", "RPM",
 		"SteeringWheelAngle", "VelocityX", "VelocityY", "VelocityZ", "Lat", "Lon", "SessionTime",
 		"LapCurrentLapTime", "PlayerCarPosition", "FuelLevel", "PlayerCarIdx", "SessionNum", "alt", "LatAccel",
-		"LongAccel", "VertAccel", "pitch", "roll", "yaw", "YawNorth",
+		"LongAccel", "VertAccel", "pitch", "roll", "yaw", "YawNorth", "Voltage", "LapLastLapTime", "WaterTemp",
+		"LapDeltaToBestLap", "LapCurrentLapTime", "LFpressure", "RFpressure", "LRpressure", "RRpressure", "LFtempM",
+		"RFtempM", "LRtempM", "RRtempM",
 	}
 }
 
