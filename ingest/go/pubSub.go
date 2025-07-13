@@ -172,16 +172,15 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 		tickTime := p.sessionTime.Add(time.Duration(sessionTime * float64(time.Second)))
 
 		tick := map[string]interface{}{
-			"lap_id":               fmt.Sprintf("%d", lapID),
-			"speed":                getFloatValue(record, "Speed"),
-			"lap_dist_pct":         getFloatValue(record, "LapDistPct"),
-			"lap_current_lap_time": getFloatValue(record, "LapCurresntLapTime"),
-			"session_id":           p.sessionID,
-			"session_num":          sessionNum,
-			"session_time":         sessionTime,
-			"car_id":               carID,
-			"track_name":           trackName,
-			"track_id":             trackID,
+			"lap_id":       fmt.Sprintf("%d", lapID),
+			"speed":        getFloatValue(record, "Speed"),
+			"lap_dist_pct": getFloatValue(record, "LapDistPct"),
+			"session_id":   p.sessionID,
+			"session_num":  sessionNum,
+			"session_time": sessionTime,
+			"car_id":       carID,
+			"track_name":   trackName,
+			"track_id":     trackID,
 
 			"steering_wheel_angle": getFloatValue(record, "SteeringWheelAngle"),
 			"player_car_position":  getFloatValue(record, "PlayerCarPosition"),
