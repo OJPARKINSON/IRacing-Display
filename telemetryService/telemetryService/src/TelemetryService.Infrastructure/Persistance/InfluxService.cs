@@ -144,7 +144,7 @@ public class InfluxService : IDisposable
                             .Field("lFtempM", tel.LFtempM)
                             .Field("rFtempM", tel.RFtempM)
                             .Field("lRtempM", tel.LRtempM)
-                            .Field("pRtempM", tel.RRtempM)
+                            .Field("rRtempM", tel.RRtempM)
                             .Timestamp(DateTime.Parse(tel.Tick_time), WritePrecision.Ns)
                     );
                 }
