@@ -211,10 +211,10 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			"rFpressure":           getFloatValue(record, "RFpressure"),
 			"lRpressure":           getFloatValue(record, "LRpressure"),
 			"rRpressure":           getFloatValue(record, "RRpressure"),
-			"lFtempM":              getFloatValue(record, "LFtempM"),
-			"rFtempM":              getFloatValue(record, "RFtempM"),
-			"lRtempM":              getFloatValue(record, "LRtempM"),
-			"rRtempM":              getFloatValue(record, "RRtempM"),
+			"lFtempCM":             getFloatValue(record, "LFtempCM"),
+			"rFtempCM":             getFloatValue(record, "RFtempCM"),
+			"lRtempCM":             getFloatValue(record, "LRtempCM"),
+			"rRtempCM":             getFloatValue(record, "RRtempCM"),
 			"tick_time":            tickTime.UTC(),
 		}
 

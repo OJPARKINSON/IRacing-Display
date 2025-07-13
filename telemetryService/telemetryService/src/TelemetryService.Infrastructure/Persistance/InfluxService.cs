@@ -141,10 +141,10 @@ public class InfluxService : IDisposable
                             .Field("rFpressure", tel.RFpressure)
                             .Field("lRpressure", tel.LRpressure)
                             .Field("rRpressure", tel.RRpressure)
-                            .Field("lFtempM", tel.LFtempM)
-                            .Field("rFtempM", tel.RFtempM)
-                            .Field("lRtempM", tel.LRtempM)
-                            .Field("rRtempM", tel.RRtempM)
+                            .Field("lFtempCM", tel.LFtempCM)
+                            .Field("rFtempCM", tel.RFtempCM)
+                            .Field("lRtempCM", tel.LRtempCM)
+                            .Field("rRtempCM", tel.RRtempCM)
                             .Timestamp(DateTime.Parse(tel.Tick_time), WritePrecision.Ns)
                     );
                 }
