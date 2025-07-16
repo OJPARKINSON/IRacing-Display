@@ -27,14 +27,10 @@ const MAP_THEMES = {
     dark: {
         name: "Dark",
         url: 'https://{a-d}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        attribution: '© OpenStreetMap contributors, © CARTO',
-        description: "Black background with white roads"
     },
     osm: {
         name: "OpenStreetMap",
         url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        attribution: '© OpenStreetMap contributors',
-        description: "Standard OpenStreetMap"
     }
 };
 
@@ -97,7 +93,7 @@ export default function EnhancedGPSTrackMap({
         const baseLayer = new TileLayer({
             source: new XYZ({
                 url: MAP_THEMES[mapTheme].url,
-                attributions: MAP_THEMES[mapTheme].attribution
+
             })
         });
         baseLayerRef.current = baseLayer;
@@ -169,7 +165,6 @@ export default function EnhancedGPSTrackMap({
 
         const newSource = new XYZ({
             url: MAP_THEMES[mapTheme].url,
-            attributions: MAP_THEMES[mapTheme].attribution
         });
 
         baseLayerRef.current.setSource(newSource);
@@ -466,7 +461,6 @@ export default function EnhancedGPSTrackMap({
                                     }`}
                             >
                                 <div className="font-medium">{theme.name}</div>
-                                <div className="text-gray-400 text-xs">{theme.description}</div>
                             </button>
                         ))}
                     </div>
