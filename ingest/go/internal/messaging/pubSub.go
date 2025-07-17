@@ -139,7 +139,6 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 		return nil
 	}
 
-	// Get worker ID from first record (if available)
 	workerID := 0
 	if len(data) > 0 {
 		if wid, ok := data[0]["workerID"]; ok {
@@ -238,17 +237,15 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 		p.pointsBuffer = append(p.pointsBuffer, jsonData...)
 		p.bufferSize++
 
-		// Flush if buffer is getting close to limit
 		if len(p.pointsBuffer) >= p.maxBufferSize-1000 { // Leave 1KB buffer
 			p.flushBuffer()
 		}
 	}
 
 	p.batchesLoaded++
-	log.Printf("Worker %d: Processed %d telemetry points in session %s (batch %d, buffer size: %d)",
-		workerID, len(data), p.sessionID, p.batchesLoaded, p.bufferSize)
+	// log.Printf("Worker %d: Processed %d telemetry points in session %s (batch %d, buffer size: %d)",
+	// 	workerID, len(data), p.sessionID, p.batchesLoaded, p.bufferSize)
 
-	// Flush buffer at end of batch to ensure delivery
 	p.flushBuffer()
 
 	return nil
@@ -268,16 +265,13 @@ func (p *PubSub) flushBuffer() {
 
 	if err != nil {
 		log.Printf("Failed to publish message: %v", err)
-		// Don't fail hard, just log the error
 	}
 
-	// Reset buffer
 	p.pointsBuffer = p.pointsBuffer[:0]
 	p.bufferSize = 0
 }
 
 func (p *PubSub) Close() error {
-	// Flush any remaining data
 	p.mu.Lock()
 	p.flushBuffer()
 	p.mu.Unlock()

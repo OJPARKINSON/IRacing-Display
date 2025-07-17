@@ -16,14 +16,12 @@ import (
 	"github.com/teamjorge/ibt"
 )
 
-// FileProcessor handles processing of individual IBT files
 type FileProcessor struct {
 	config   *config.Config
 	workerID int
 	pubSub   *messaging.PubSub
 }
 
-// ProcessResult contains the results of processing a file
 type ProcessResult struct {
 	RecordCount int
 	BatchCount  int
@@ -31,7 +29,6 @@ type ProcessResult struct {
 	TrackName   string
 }
 
-// NewFileProcessor creates a new file processor for a worker
 func NewFileProcessor(cfg *config.Config, workerID int) (*FileProcessor, error) {
 	return &FileProcessor{
 		config:   cfg,
@@ -39,25 +36,20 @@ func NewFileProcessor(cfg *config.Config, workerID int) (*FileProcessor, error) 
 	}, nil
 }
 
-// ProcessFile processes a single IBT file and returns results
 func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string, fileEntry os.DirEntry) (*ProcessResult, error) {
 	fileName := fileEntry.Name()
 
-	// Skip non-IBT files
 	if !strings.Contains(fileName, ".ibt") {
 		return nil, fmt.Errorf("not an IBT file: %s", fileName)
 	}
 
-	// Parse session time from filename
 	sessionTime, err := fp.parseFileName(fileName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse time from filename: %w", err)
 	}
 
-	// Build full file path
 	fullPath := filepath.Join(telemetryFolder, fileName)
 
-	// Glob the file (maintaining compatibility with existing logic)
 	files, err := filepath.Glob(fullPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not glob file %s: %w", fullPath, err)
@@ -69,7 +61,6 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 
 	log.Printf("Worker %d: Found %d files to process", fp.workerID, len(files))
 
-	// Parse IBT stubs
 	stubs, err := ibt.ParseStubs(files...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse stubs for %v: %w", files, err)
@@ -79,18 +70,14 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 		return nil, fmt.Errorf("no telemetry data found in IBT file: %s", fileName)
 	}
 
-	// Extract session information
 	headers := stubs[0].Headers()
 	weekendInfo := headers.SessionInfo.WeekendInfo
 
-	// Initialize PubSub connection for this worker
 	fp.pubSub = messaging.NewPubSub(strconv.Itoa(weekendInfo.SubSessionID), sessionTime, fp.config)
 
-	// Group telemetry data
 	groups := stubs.Group()
 	log.Printf("Worker %d: Grouped telemetry data into %d groups", fp.workerID, len(groups))
 
-	// Log session information
 	log.Printf("Worker %d: SessionID: %d, SubSessionID: %d, Track: %s, TrackID: %d",
 		fp.workerID, weekendInfo.SessionID, weekendInfo.SubSessionID,
 		weekendInfo.TrackDisplayName, weekendInfo.TrackID)
@@ -98,7 +85,6 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 	totalRecords := 0
 	totalBatches := 0
 
-	// Process each group
 	for groupNumber, group := range groups {
 		select {
 		case <-ctx.Done():
@@ -131,7 +117,6 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 		log.Printf("Worker %d: Completed processing group %d in %v", fp.workerID, groupNumber, time.Since(startGroup))
 	}
 
-	// Clean up IBT resources
 	ibt.CloseAllStubs(groups)
 
 	return &ProcessResult{
@@ -142,7 +127,6 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 	}, nil
 }
 
-// Close cleans up resources used by the file processor
 func (fp *FileProcessor) Close() error {
 	if fp.pubSub != nil {
 		return fp.pubSub.Close()
@@ -150,7 +134,6 @@ func (fp *FileProcessor) Close() error {
 	return nil
 }
 
-// parseFileName extracts timestamp from IBT filename
 func (fp *FileProcessor) parseFileName(fileName string) (time.Time, error) {
 	regex := regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}`)
 
