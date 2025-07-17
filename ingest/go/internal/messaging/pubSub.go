@@ -1,25 +1,17 @@
-package main
+package messaging
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/config"
 	amqp "github.com/rabbitmq/amqp091-go"
-)
-
-var (
-	RabbitMqURL  = getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/") // "amqp://guest:guest@192.168.1.205:5672/"
-	MaxBatchSize = getEnvAsInt("MAX_BATCH_SIZE", 1500)                          // 100 kb
-	BatchTimeout = getEnvAsDuration("BATCH_TIMEOUT", 10*time.Second)
-	MaxRetries   = getEnvAsInt("MAX_RETRIES", 3)
-	RetryDelay   = getEnvAsDuration("RETRY_DELAY", 500*time.Millisecond)
 )
 
 type PubSub struct {
@@ -27,6 +19,7 @@ type PubSub struct {
 	ch            *amqp.Channel
 	sessionID     string
 	sessionTime   time.Time
+	config        *config.Config
 	mu            sync.Mutex
 	batchesLoaded int
 	ctx           context.Context
@@ -36,6 +29,7 @@ type PubSub struct {
 	pointsBuffer  []byte
 	bufferSize    int
 	maxBufferSize int
+	workerID      int
 }
 
 func failOnError(err error, msg string) {
@@ -44,10 +38,10 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func newPubSub(sessionId string, sessionTime time.Time) *PubSub {
-	log.Printf("Connecting to RabbitMQ at %s", RabbitMqURL)
+func NewPubSub(sessionId string, sessionTime time.Time, cfg *config.Config) *PubSub {
+	log.Printf("Connecting to RabbitMQ at %s", cfg.RabbitMQURL)
 
-	conn, err := amqp.Dial(RabbitMqURL)
+	conn, err := amqp.Dial(cfg.RabbitMQURL)
 	failOnError(err, "Failed to connect to RabbitMQ")
 
 	ch, err := conn.Channel()
@@ -82,11 +76,12 @@ func newPubSub(sessionId string, sessionTime time.Time) *PubSub {
 		ch:            ch,
 		sessionID:     sessionId,
 		sessionTime:   sessionTime,
+		config:        cfg,
 		ctx:           ctx,
 		cancel:        cancel,
 		errorCh:       make(chan error, 100),
-		pointsBuffer:  make([]byte, 0, MaxBatchSize),
-		maxBufferSize: MaxBatchSize,
+		pointsBuffer:  make([]byte, 0, cfg.BatchSizeBytes),
+		maxBufferSize: cfg.BatchSizeBytes,
 	}
 }
 
@@ -144,6 +139,16 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 		return nil
 	}
 
+	// Get worker ID from first record (if available)
+	workerID := 0
+	if len(data) > 0 {
+		if wid, ok := data[0]["workerID"]; ok {
+			if widInt, ok := wid.(int); ok {
+				workerID = widInt
+			}
+		}
+	}
+
 	for _, record := range data {
 		lapID := getIntValue(record, "Lap")
 		sessionTime := getFloatValue(record, "SessionTime")
@@ -181,6 +186,7 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			"car_id":       carID,
 			"track_name":   trackName,
 			"track_id":     trackID,
+			"worker_id":    workerID,
 
 			"steering_wheel_angle": getFloatValue(record, "SteeringWheelAngle"),
 			"player_car_position":  getFloatValue(record, "PlayerCarPosition"),
@@ -221,6 +227,7 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 		jsonData, err := json.Marshal(tick)
 		if err != nil {
 			log.Printf("Error marshaling point to JSON: %v", err)
+			continue
 		}
 
 		if p.bufferSize == 0 {
@@ -231,15 +238,18 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 		p.pointsBuffer = append(p.pointsBuffer, jsonData...)
 		p.bufferSize++
 
-		// Flush if buffer is full
-		if p.bufferSize >= p.maxBufferSize {
+		// Flush if buffer is getting close to limit
+		if len(p.pointsBuffer) >= p.maxBufferSize-1000 { // Leave 1KB buffer
 			p.flushBuffer()
 		}
 	}
 
 	p.batchesLoaded++
-	log.Printf("Processed %d telemetry points in session %s (batch %d, buffer size: %d)",
-		len(data), p.sessionID, p.batchesLoaded, p.bufferSize)
+	log.Printf("Worker %d: Processed %d telemetry points in session %s (batch %d, buffer size: %d)",
+		workerID, len(data), p.sessionID, p.batchesLoaded, p.bufferSize)
+
+	// Flush buffer at end of batch to ensure delivery
+	p.flushBuffer()
 
 	return nil
 }
@@ -256,13 +266,22 @@ func (p *PubSub) flushBuffer() {
 		Body:        p.pointsBuffer,
 	})
 
-	failOnError(err, "Failed to publish message")
+	if err != nil {
+		log.Printf("Failed to publish message: %v", err)
+		// Don't fail hard, just log the error
+	}
 
+	// Reset buffer
 	p.pointsBuffer = p.pointsBuffer[:0]
 	p.bufferSize = 0
 }
 
 func (p *PubSub) Close() error {
+	// Flush any remaining data
+	p.mu.Lock()
+	p.flushBuffer()
+	p.mu.Unlock()
+
 	p.cancel()
 	p.wg.Wait()
 
@@ -279,30 +298,7 @@ func (p *PubSub) Close() error {
 }
 
 func (p *PubSub) Loaded() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.batchesLoaded
-}
-
-func getEnv(key, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return fallback
-}
-
-func getEnvAsInt(key string, fallback int) int {
-	if value, exists := os.LookupEnv(key); exists {
-		if intVal, err := strconv.Atoi(value); err == nil {
-			return intVal
-		}
-	}
-	return fallback
-}
-
-func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
-	if value, exists := os.LookupEnv(key); exists {
-		if duration, err := time.ParseDuration(value); err == nil {
-			return duration
-		}
-	}
-	return fallback
 }

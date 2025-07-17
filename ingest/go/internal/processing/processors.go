@@ -1,4 +1,4 @@
-package main
+package processing
 
 import (
 	"fmt"
@@ -6,19 +6,23 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/config"
+	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/messaging"
 	"github.com/teamjorge/ibt"
 	"github.com/teamjorge/ibt/headers"
 )
 
 type loaderProcessor struct {
-	pubSub      *PubSub
-	cache       []map[string]interface{}
-	groupNumber int
-	threshold   int
-	mu          sync.Mutex
-	lastFlush   time.Time
-	flushTimer  *time.Timer
-	metrics     processorMetrics
+	pubSub         *messaging.PubSub
+	cache          []map[string]interface{}
+	groupNumber    int
+	thresholdBytes int
+	workerID       int
+	mu             sync.Mutex
+	lastFlush      time.Time
+	flushTimer     *time.Timer
+	metrics        processorMetrics
+	currentBytes   int
 }
 
 type processorMetrics struct {
@@ -30,19 +34,21 @@ type processorMetrics struct {
 	mu                sync.Mutex
 }
 
-func newLoaderProcessor(pubSub *PubSub, groupNumber int, threshold int) *loaderProcessor {
+func NewLoaderProcessor(pubSub *messaging.PubSub, groupNumber int, config *config.Config, workerID int) *loaderProcessor {
 	lp := &loaderProcessor{
-		pubSub:      pubSub,
-		cache:       make([]map[string]interface{}, 0, threshold),
-		groupNumber: groupNumber,
-		threshold:   threshold,
-		lastFlush:   time.Now(),
+		pubSub:         pubSub,
+		cache:          make([]map[string]interface{}, 0, 1000), // Initial capacity
+		groupNumber:    groupNumber,
+		thresholdBytes: config.BatchSizeBytes,
+		workerID:       workerID,
+		lastFlush:      time.Now(),
+		currentBytes:   0,
 		metrics: processorMetrics{
 			processingStarted: time.Now(),
 		},
 	}
 
-	lp.flushTimer = time.AfterFunc(10*time.Second, lp.flushTimerCallback)
+	lp.flushTimer = time.AfterFunc(config.BatchTimeout, lp.flushTimerCallback)
 
 	return lp
 }
@@ -52,9 +58,10 @@ func (l *loaderProcessor) flushTimerCallback() {
 	defer l.mu.Unlock()
 
 	if len(l.cache) > 0 {
-		log.Printf("Auto-flushing %d records after timeout", len(l.cache))
+		log.Printf("Worker %d: Auto-flushing %d records (%d bytes) after timeout",
+			l.workerID, len(l.cache), l.currentBytes)
 		if err := l.loadBatch(); err != nil {
-			log.Printf("Error during auto-flush: %v", err)
+			log.Printf("Worker %d: Error during auto-flush: %v", l.workerID, err)
 		}
 	}
 
@@ -83,6 +90,7 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 		enrichedInput[k] = v
 	}
 	enrichedInput["groupNum"] = l.groupNumber
+	enrichedInput["workerID"] = l.workerID
 
 	if session != nil && len(session.SessionInfo.Sessions) > 0 {
 		sessionIndex := 0
@@ -97,7 +105,18 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 		enrichedInput["sessionID"] = 0
 	}
 
+	// Estimate JSON size for this record
+	estimatedSize := l.estimateJSONSize(enrichedInput)
+
+	// Check if adding this record would exceed the byte threshold
+	if l.currentBytes+estimatedSize > l.thresholdBytes && len(l.cache) > 0 {
+		if err := l.loadBatch(); err != nil {
+			return fmt.Errorf("failed to load batch: %w", err)
+		}
+	}
+
 	l.cache = append(l.cache, enrichedInput)
+	l.currentBytes += estimatedSize
 
 	l.metrics.mu.Lock()
 	l.metrics.totalProcessed++
@@ -108,13 +127,41 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 	}
 	l.metrics.mu.Unlock()
 
-	if len(l.cache) >= l.threshold {
-		if err := l.loadBatch(); err != nil {
-			return fmt.Errorf("failed to load batch: %w", err)
+	return nil
+}
+
+// estimateJSONSize provides a rough estimate of JSON serialization size
+func (l *loaderProcessor) estimateJSONSize(record map[string]interface{}) int {
+	// Quick estimation without full serialization
+	// This is much faster than json.Marshal for every record
+	size := 2 // Opening and closing braces
+
+	for k, v := range record {
+		// Key size: "key":
+		size += len(k) + 3
+
+		// Value size estimation
+		switch val := v.(type) {
+		case string:
+			size += len(val) + 2 // quotes
+		case int, int32, int64:
+			size += 10 // rough estimate for numbers
+		case float32, float64:
+			size += 15 // rough estimate for floats
+		case bool:
+			if val {
+				size += 4 // "true"
+			} else {
+				size += 5 // "false"
+			}
+		default:
+			size += 20 // conservative estimate for other types
 		}
+
+		size += 1 // comma separator
 	}
 
-	return nil
+	return size
 }
 
 func (l *loaderProcessor) loadBatch() error {
@@ -124,13 +171,19 @@ func (l *loaderProcessor) loadBatch() error {
 
 	batch := make([]map[string]interface{}, len(l.cache))
 	copy(batch, l.cache)
-	l.cache = l.cache[:0]
+	batchSize := l.currentBytes
 
+	// Reset cache and byte counter
+	l.cache = l.cache[:0]
+	l.currentBytes = 0
 	l.lastFlush = time.Now()
 
 	l.metrics.mu.Lock()
 	l.metrics.totalBatches++
 	l.metrics.mu.Unlock()
+
+	log.Printf("Worker %d: Loading batch of %d records (%d bytes)",
+		l.workerID, len(batch), batchSize)
 
 	return l.pubSub.Exec(batch)
 }
@@ -144,7 +197,8 @@ func (l *loaderProcessor) Close() error {
 	defer l.mu.Unlock()
 
 	if len(l.cache) > 0 {
-		log.Printf("Flushing remaining %d records on close", len(l.cache))
+		log.Printf("Worker %d: Flushing remaining %d records (%d bytes) on close",
+			l.workerID, len(l.cache), l.currentBytes)
 		if err := l.loadBatch(); err != nil {
 			return fmt.Errorf("failed to flush data on close: %w", err)
 		}
@@ -160,12 +214,21 @@ func (l *loaderProcessor) logMetrics() {
 	defer l.metrics.mu.Unlock()
 
 	totalTime := time.Since(l.metrics.processingStarted).Milliseconds()
-	pointsPerSecond := int64(l.metrics.totalProcessed) / totalTime
+	var pointsPerSecond int64
+	if totalTime > 0 {
+		pointsPerSecond = int64(l.metrics.totalProcessed) * 1000 / totalTime
+	}
 
-	log.Printf("Processing metrics for group %d:", l.groupNumber)
+	log.Printf("Worker %d processing metrics for group %d:", l.workerID, l.groupNumber)
 	log.Printf("  Total points processed: %d", l.metrics.totalProcessed)
 	log.Printf("  Total batches sent: %d", l.metrics.totalBatches)
 	log.Printf("  Maximum batch size: %d", l.metrics.maxBatchSize)
 	log.Printf("  Processing time: %d milliseconds", totalTime)
 	log.Printf("  Points per second: %d", pointsPerSecond)
+}
+
+func (l *loaderProcessor) GetMetrics() processorMetrics {
+	l.metrics.mu.Lock()
+	defer l.metrics.mu.Unlock()
+	return l.metrics
 }

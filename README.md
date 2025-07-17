@@ -20,5 +20,9 @@ An IRacing display over local network
 
 ## Next step
 
-- Add all the telemetry data to one bucket per track
-- Publish all the data from telemtery folder (Create a way of storing locally what has been sent)
+- [x] Add all the telemetry data to one bucket per track
+- [] Handle session num 0 meaning practice
+- [] Create a store on the device to know what files have already been sent
+- [] Better filter non ibt files
+- [] look at better running in parallel
+
