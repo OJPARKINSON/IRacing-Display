@@ -19,10 +19,8 @@ import (
 func main() {
 	startTime := time.Now()
 
-	// Load configuration
 	cfg := config.LoadConfig()
 
-	// Set runtime parameters
 	if cfg.GoMaxProcs > 0 {
 		runtime.GOMAXPROCS(cfg.GoMaxProcs)
 	}
@@ -31,11 +29,9 @@ func main() {
 	log.Printf("Configuration: BatchSize=%dKB, WorkerTimeout=%v, MaxRetries=%d",
 		cfg.BatchSizeBytes/1024, cfg.WorkerTimeout, cfg.MaxRetries)
 
-	// Create cancellable context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Setup signal handling for graceful shutdown
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -44,38 +40,32 @@ func main() {
 		cancel()
 	}()
 
-	// Validate command line arguments
 	if len(os.Args) < 2 {
 		log.Fatal("Usage: ./telemetry-app <telemetry-folder-path>")
 	}
 
 	telemetryFolder := os.Args[1]
 
-	// Ensure folder path ends with separator for consistent path joining
 	if !strings.HasSuffix(telemetryFolder, string(filepath.Separator)) {
 		telemetryFolder += string(filepath.Separator)
 	}
 
 	log.Println("Processing IBT folder:", telemetryFolder)
 
-	// Create and start worker pool
 	pool := worker.NewWorkerPool(cfg)
 	pool.Start()
 	defer pool.Stop()
 
-	// Discover and queue files for processing
 	if err := discoverAndQueueFiles(ctx, pool, telemetryFolder); err != nil {
 		log.Printf("Error during file discovery: %v", err)
 		return
 	}
 
-	// Wait for processing to complete or context cancellation
 	waitForCompletion(ctx, pool, startTime)
 
 	log.Printf("Application completed in %v", time.Since(startTime))
 }
 
-// discoverAndQueueFiles finds IBT files and submits them to the worker pool
 func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemetryFolder string) error {
 	directory := processing.NewDir(telemetryFolder)
 	files := directory.WatchDir()
@@ -93,20 +83,19 @@ func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemet
 
 		fileName := file.Name()
 
-		// Filter for IBT files only
 		if !strings.Contains(fileName, ".ibt") {
 			log.Printf("Skipping non-IBT file: %s", fileName)
 			continue
 		}
 
-		// Create work item
+		fileName = strings.ReplaceAll(fileName, " ", "-")
+
 		workItem := worker.WorkItem{
 			FilePath:   telemetryFolder,
 			FileInfo:   file,
 			RetryCount: 0,
 		}
 
-		// Submit to worker pool
 		if err := pool.SubmitFile(workItem); err != nil {
 			log.Printf("Failed to queue file %s: %v", fileName, err)
 			return err
@@ -120,7 +109,6 @@ func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemet
 	return nil
 }
 
-// waitForCompletion monitors the worker pool and waits for completion
 func waitForCompletion(ctx context.Context, pool *worker.WorkerPool, startTime time.Time) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -135,7 +123,6 @@ func waitForCompletion(ctx context.Context, pool *worker.WorkerPool, startTime t
 		case <-ticker.C:
 			metrics := pool.GetMetrics()
 
-			// Log progress
 			elapsed := time.Since(startTime)
 			log.Printf("=== Progress Update (elapsed: %v) ===", elapsed)
 			log.Printf("Files processed: %d", metrics.TotalFilesProcessed)
@@ -145,14 +132,12 @@ func waitForCompletion(ctx context.Context, pool *worker.WorkerPool, startTime t
 			log.Printf("Active workers: %d", metrics.ActiveWorkers)
 			log.Printf("Errors: %d", metrics.TotalErrors)
 
-			// Calculate rates since last update
 			if lastMetrics.TotalFilesProcessed > 0 {
 				filesDelta := metrics.TotalFilesProcessed - lastMetrics.TotalFilesProcessed
 				recordsDelta := metrics.TotalRecordsProcessed - lastMetrics.TotalRecordsProcessed
 				log.Printf("Processing rate: %d files/30s, %d records/30s", filesDelta, recordsDelta)
 			}
 
-			// Check if processing is complete (no queue depth and no active processing)
 			if metrics.QueueDepth == 0 && metrics.TotalFilesProcessed > 0 {
 				log.Println("All files processed, shutting down...")
 				return

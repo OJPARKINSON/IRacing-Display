@@ -28,7 +28,7 @@ func LoadConfig() *Config {
 		FileQueueSize: getEnvAsInt("FILE_QUEUE_SIZE", 50),
 		WorkerTimeout: getEnvAsDuration("WORKER_TIMEOUT", 30*time.Minute),
 
-		BatchSizeBytes: getEnvAsInt("BATCH_SIZE_BYTES", 150000), // 150KB
+		BatchSizeBytes: getEnvAsInt("BATCH_SIZE_BYTES", 250000), // 150KB
 		BatchTimeout:   getEnvAsDuration("BATCH_TIMEOUT", 5*time.Second),
 		MaxRetries:     getEnvAsInt("MAX_RETRIES", 3),
 		RetryDelay:     getEnvAsDuration("RETRY_DELAY", 500*time.Millisecond),
