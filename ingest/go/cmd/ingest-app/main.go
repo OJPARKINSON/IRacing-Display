@@ -56,17 +56,18 @@ func main() {
 	pool.Start()
 	defer pool.Stop()
 
-	if err := discoverAndQueueFiles(ctx, pool, telemetryFolder); err != nil {
+	expectedFiles, err := discoverAndQueueFiles(ctx, pool, telemetryFolder)
+	if err != nil {
 		log.Printf("Error during file discovery: %v", err)
 		return
 	}
 
-	waitForCompletion(ctx, pool, startTime)
+	waitForCompletion(ctx, pool, startTime, expectedFiles)
 
 	log.Printf("Application completed in %v", time.Since(startTime))
 }
 
-func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemetryFolder string) error {
+func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemetryFolder string) (int, error) {
 	directory := processing.NewDir(telemetryFolder)
 	files := directory.WatchDir()
 
@@ -77,7 +78,7 @@ func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemet
 		select {
 		case <-ctx.Done():
 			log.Println("File discovery cancelled")
-			return ctx.Err()
+			return filesQueued, ctx.Err()
 		default:
 		}
 
@@ -88,8 +89,6 @@ func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemet
 			continue
 		}
 
-		fileName = strings.ReplaceAll(fileName, " ", "-")
-
 		workItem := worker.WorkItem{
 			FilePath:   telemetryFolder,
 			FileInfo:   file,
@@ -98,7 +97,7 @@ func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemet
 
 		if err := pool.SubmitFile(workItem); err != nil {
 			log.Printf("Failed to queue file %s: %v", fileName, err)
-			return err
+			return filesQueued, err
 		}
 
 		filesQueued++
@@ -106,14 +105,16 @@ func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemet
 	}
 
 	log.Printf("Successfully queued %d IBT files for processing", filesQueued)
-	return nil
+	return filesQueued, nil
 }
 
-func waitForCompletion(ctx context.Context, pool *worker.WorkerPool, startTime time.Time) {
-	ticker := time.NewTicker(30 * time.Second)
+func waitForCompletion(ctx context.Context, pool *worker.WorkerPool, startTime time.Time, expectedFiles int) {
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	lastMetrics := worker.PoolMetrics{}
+	lastCheck := time.Now()
+	stableCount := 0
 
 	for {
 		select {
@@ -125,7 +126,7 @@ func waitForCompletion(ctx context.Context, pool *worker.WorkerPool, startTime t
 
 			elapsed := time.Since(startTime)
 			log.Printf("=== Progress Update (elapsed: %v) ===", elapsed)
-			log.Printf("Files processed: %d", metrics.TotalFilesProcessed)
+			log.Printf("Files processed: %d/%d", metrics.TotalFilesProcessed, expectedFiles)
 			log.Printf("Records processed: %d", metrics.TotalRecordsProcessed)
 			log.Printf("Batches sent: %d", metrics.TotalBatchesProcessed)
 			log.Printf("Queue depth: %d", metrics.QueueDepth)
@@ -135,15 +136,29 @@ func waitForCompletion(ctx context.Context, pool *worker.WorkerPool, startTime t
 			if lastMetrics.TotalFilesProcessed > 0 {
 				filesDelta := metrics.TotalFilesProcessed - lastMetrics.TotalFilesProcessed
 				recordsDelta := metrics.TotalRecordsProcessed - lastMetrics.TotalRecordsProcessed
-				log.Printf("Processing rate: %d files/30s, %d records/30s", filesDelta, recordsDelta)
-			}
-
-			if metrics.QueueDepth == 0 && metrics.TotalFilesProcessed > 0 {
-				log.Println("All files processed, shutting down...")
-				return
+				timeDelta := time.Since(lastCheck).Seconds()
+				if timeDelta > 0 {
+					log.Printf("Processing rate: %.1f files/sec, %.0f records/sec",
+						float64(filesDelta)/timeDelta, float64(recordsDelta)/timeDelta)
+				}
 			}
 
 			lastMetrics = metrics
+			lastCheck = time.Now()
+
+		default:
+			time.Sleep(200 * time.Millisecond)
+			metrics := pool.GetMetrics()
+
+			if metrics.QueueDepth == 0 && metrics.TotalFilesProcessed >= expectedFiles {
+				stableCount++
+				if stableCount >= 3 {
+					log.Printf("All %d files processed, shutting down...", expectedFiles)
+					return
+				}
+			} else {
+				stableCount = 0
+			}
 		}
 	}
 }

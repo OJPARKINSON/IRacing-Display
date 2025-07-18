@@ -23,6 +23,9 @@ type loaderProcessor struct {
 	flushTimer     *time.Timer
 	metrics        processorMetrics
 	currentBytes   int
+	batchBuffer    []map[string]interface{}
+	bufferPool     *sync.Pool
+	config         *config.Config
 }
 
 type processorMetrics struct {
@@ -39,12 +42,19 @@ func NewLoaderProcessor(pubSub *messaging.PubSub, groupNumber int, config *confi
 		pubSub:         pubSub,
 		cache:          make([]map[string]interface{}, 0, 1000), // Initial capacity
 		groupNumber:    groupNumber,
+		config:         config,
 		thresholdBytes: config.BatchSizeBytes,
 		workerID:       workerID,
 		lastFlush:      time.Now(),
 		currentBytes:   0,
 		metrics: processorMetrics{
 			processingStarted: time.Now(),
+		},
+		batchBuffer: make([]map[string]interface{}, 0, 1000),
+		bufferPool: &sync.Pool{
+			New: func() interface{} {
+				return make(map[string]interface{}, 50)
+			},
 		},
 	}
 
@@ -58,14 +68,12 @@ func (l *loaderProcessor) flushTimerCallback() {
 	defer l.mu.Unlock()
 
 	if len(l.cache) > 0 {
-		log.Printf("Worker %d: Auto-flushing %d records (%d bytes) after timeout",
-			l.workerID, len(l.cache), l.currentBytes)
 		if err := l.loadBatch(); err != nil {
 			log.Printf("Worker %d: Error during auto-flush: %v", l.workerID, err)
 		}
 	}
 
-	l.flushTimer.Reset(10 * time.Second)
+	l.flushTimer.Reset(l.config.BatchTimeout)
 }
 
 func (l *loaderProcessor) Whitelist() []string {
@@ -80,6 +88,11 @@ func (l *loaderProcessor) Whitelist() []string {
 }
 
 func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers.Session) error {
+	if l.metrics.totalProcessed%50000 == 0 {
+		log.Printf("Worker %d: Processed %d records, current batch size: %d",
+			l.workerID, l.metrics.totalProcessed, len(l.cache))
+	}
+
 	startTime := time.Now()
 
 	l.mu.Lock()
@@ -107,7 +120,13 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 
 	estimatedSize := l.estimateJSONSize(enrichedInput)
 
-	if l.currentBytes+estimatedSize > l.thresholdBytes && len(l.cache) > 0 {
+	maxOverage := l.thresholdBytes / 10
+	wouldExceedLimit := l.currentBytes+estimatedSize > l.thresholdBytes+maxOverage
+	if wouldExceedLimit && len(l.cache) > 0 {
+		if l.metrics.totalBatches%100 == 0 {
+			log.Printf("Worker %d: Flushing batch at %d records due to size limit",
+				l.workerID, len(l.cache))
+		}
 		if err := l.loadBatch(); err != nil {
 			return fmt.Errorf("failed to load batch: %w", err)
 		}
@@ -139,7 +158,15 @@ func (l *loaderProcessor) estimateJSONSize(record map[string]interface{}) int {
 		switch val := v.(type) {
 		case string:
 			size += len(val) + 2
-		case int, int32, int64:
+		case int:
+			if val == 0 {
+				size += 1
+			} else if val < 0 {
+				size += 1 + intDigits(-val)
+			} else {
+				size += intDigits(val)
+			}
+		case int32, int64:
 			size += 10
 		case float32, float64:
 			size += 15
@@ -159,14 +186,39 @@ func (l *loaderProcessor) estimateJSONSize(record map[string]interface{}) int {
 	return size
 }
 
+func intDigits(n int) int {
+	if n < 10 {
+		return 1
+	}
+	if n < 100 {
+		return 2
+	}
+	if n < 1000 {
+		return 3
+	}
+	if n < 10000 {
+		return 4
+	}
+	if n < 100000 {
+		return 5
+	}
+	if n < 1000000 {
+		return 6
+	}
+	return 7
+}
+
 func (l *loaderProcessor) loadBatch() error {
 	if len(l.cache) == 0 {
 		return nil
 	}
 
-	batch := make([]map[string]interface{}, len(l.cache))
-	copy(batch, l.cache)
-	// batchSize := l.currentBytes
+	l.batchBuffer = l.batchBuffer[:len(l.cache)]
+	copy(l.batchBuffer, l.cache)
+
+	for _, m := range l.cache {
+		l.bufferPool.Put(m)
+	}
 
 	l.cache = l.cache[:0]
 	l.currentBytes = 0
@@ -179,7 +231,7 @@ func (l *loaderProcessor) loadBatch() error {
 	// log.Printf("Worker %d: Loading batch of %d records (%d bytes)",
 	// 	l.workerID, len(batch), batchSize)
 
-	return l.pubSub.Exec(batch)
+	return l.pubSub.Exec(l.batchBuffer)
 }
 
 func (l *loaderProcessor) Close() error {
