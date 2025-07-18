@@ -4,12 +4,9 @@ import (
 	"context"
 	"log"
 	"net/http"
-	_ "net/http/pprof" // This enables the pprof endpoints
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -24,17 +21,6 @@ func main() {
 
 	cfg := config.LoadConfig()
 
-	// Configure runtime settings for better profiling
-	if cfg.GoMaxProcs > 0 {
-		runtime.GOMAXPROCS(cfg.GoMaxProcs)
-	}
-
-	// Set GOGC for better memory profiling visibility
-	if cfg.GOGC > 0 {
-		debug.SetGCPercent(cfg.GOGC)
-	}
-
-	// Start pprof server in a goroutine
 	go func() {
 		log.Println("Starting pprof server on :6060")
 		log.Println("Access profiles at:")
@@ -51,14 +37,6 @@ func main() {
 	log.Printf("Starting telemetry application with %d workers", cfg.WorkerCount)
 	log.Printf("Configuration: BatchSize=%dKB, WorkerTimeout=%v, MaxRetries=%d",
 		cfg.BatchSizeBytes/1024, cfg.WorkerTimeout, cfg.MaxRetries)
-	log.Printf("Runtime: GOMAXPROCS=%d, GOGC=%d", runtime.GOMAXPROCS(0), debug.SetGCPercent(-1))
-	debug.SetGCPercent(cfg.GOGC) // Reset after reading
-
-	// Initial memory stats
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	log.Printf("Initial memory: Alloc=%dKB Sys=%dKB NumGC=%d",
-		m.Alloc/1024, m.Sys/1024, m.NumGC)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -93,46 +71,9 @@ func main() {
 		return
 	}
 
-	go monitorMemory(ctx)
-
 	waitForCompletion(ctx, pool, startTime, expectedFiles)
 
-	runtime.ReadMemStats(&m)
-	log.Printf("Final memory: Alloc=%dKB Sys=%dKB NumGC=%d",
-		m.Alloc/1024, m.Sys/1024, m.NumGC)
-
 	log.Printf("Application completed in %v", time.Since(startTime))
-	log.Println("Pprof server still running on :6060 for post-mortem analysis")
-	log.Println("Press Ctrl+C again to exit completely")
-
-	select {
-	case <-signalCh:
-		log.Println("Shutting down pprof server...")
-	case <-time.After(30 * time.Second):
-		log.Println("Auto-shutting down after 30 seconds...")
-	}
-}
-
-func monitorMemory(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			var m runtime.MemStats
-			runtime.ReadMemStats(&m)
-
-			log.Printf("Memory Stats: Alloc=%dKB Sys=%dKB HeapObjects=%d NumGC=%d PauseTotalNs=%dms",
-				m.Alloc/1024,
-				m.Sys/1024,
-				m.HeapObjects,
-				m.NumGC,
-				m.PauseTotalNs/1000000)
-		}
-	}
 }
 
 func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemetryFolder string) (int, error) {
