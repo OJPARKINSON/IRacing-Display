@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/config"
+	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/messaging"
 )
 
 type WorkerPool struct {
@@ -19,6 +20,8 @@ type WorkerPool struct {
 	wg          sync.WaitGroup
 	metrics     PoolMetrics
 	mu          sync.Mutex
+
+	rabbitPool *messaging.ConnectionPool
 }
 
 type PoolMetrics struct {
@@ -34,6 +37,13 @@ type PoolMetrics struct {
 func NewWorkerPool(cfg *config.Config) *WorkerPool {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	rabbitPool, err := messaging.NewConnectionPool(cfg.RabbitMQURL, cfg.RabbitMQPoolSize)
+	if err != nil {
+		log.Fatalf("Failed to create RabbitMQ connection pool: %v", err)
+	}
+
+	log.Printf("Created RabbitMQ connection pool with %d connections", cfg.RabbitMQPoolSize)
+
 	return &WorkerPool{
 		config:      cfg,
 		fileQueue:   make(chan WorkItem, cfg.FileQueueSize),
@@ -41,6 +51,7 @@ func NewWorkerPool(cfg *config.Config) *WorkerPool {
 		errorsChan:  make(chan WorkError, cfg.WorkerCount*2),
 		ctx:         ctx,
 		cancel:      cancel,
+		rabbitPool:  rabbitPool,
 		metrics: PoolMetrics{
 			StartTime: time.Now(),
 		},
@@ -98,6 +109,11 @@ func (wp *WorkerPool) Stop() {
 	wp.cancel()
 
 	wp.wg.Wait()
+
+	if wp.rabbitPool != nil {
+		wp.rabbitPool.Close()
+		log.Println("Closed RabbitMQ connection pool")
+	}
 
 	close(wp.resultsChan)
 	close(wp.errorsChan)

@@ -14,9 +14,76 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+type ConnectionPool struct {
+	connections []*amqp.Connection
+	channels    []*amqp.Channel
+	mu          sync.RWMutex
+	url         string
+	poolSize    int
+	current     int
+}
+
+func NewConnectionPool(url string, poolSize int) (*ConnectionPool, error) {
+	pool := &ConnectionPool{
+		connections: make([]*amqp.Connection, poolSize),
+		channels:    make([]*amqp.Channel, poolSize),
+		url:         url,
+		poolSize:    poolSize,
+	}
+
+	for i := 0; i < poolSize; i++ {
+		conn, err := amqp.Dial(url)
+		if err != nil {
+			pool.Close()
+			return nil, fmt.Errorf("failed to create connection %d: %w", i, err)
+		}
+
+		ch, err := conn.Channel()
+		if err != nil {
+			conn.Close()
+			pool.Close()
+
+			return nil, fmt.Errorf("failed to create channel %d: %w", i, err)
+		}
+
+		err = ch.Qos(1000, 0, false)
+		if err != nil {
+			ch.Close()
+			conn.Close()
+			pool.Close()
+			return nil, fmt.Errorf("failed to enable confirms for channel %d: %w", i, err)
+		}
+
+		pool.connections[i] = conn
+		pool.channels[i] = ch
+	}
+
+	return pool, nil
+}
+
+func (p *ConnectionPool) GetChannel() *amqp.Channel {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	ch := p.channels[p.current]
+	p.current = (p.current + 1) % p.poolSize
+
+	return ch
+}
+
+func (p *ConnectionPool) Close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for i := 0; i < len(p.channels); i++ {
+		if p.channels[i] != nil {
+			p.channels[i].Close()
+		}
+	}
+}
+
 type PubSub struct {
-	conn          *amqp.Connection
-	ch            *amqp.Channel
+	pool          *ConnectionPool
 	sessionID     string
 	sessionTime   time.Time
 	config        *config.Config
@@ -25,11 +92,16 @@ type PubSub struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
-	errorCh       chan error
-	pointsBuffer  []byte
-	bufferSize    int
-	maxBufferSize int
-	workerID      int
+
+	messageBatch []amqp.Publishing
+	batchSize    int
+	maxBatchSize int
+	flushTimer   *time.Timer
+	workerID     int
+
+	totalMessages int64
+	totalBatches  int64
+	lastFlush     time.Time
 }
 
 func failOnError(err error, msg string) {
@@ -38,51 +110,79 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func NewPubSub(sessionId string, sessionTime time.Time, cfg *config.Config) *PubSub {
+func NewPubSub(sessionId string, sessionTime time.Time, cfg *config.Config, pool *ConnectionPool) *PubSub {
 	log.Printf("Connecting to RabbitMQ at %s", cfg.RabbitMQURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 
-	conn, err := amqp.Dial(cfg.RabbitMQURL)
-	failOnError(err, "Failed to connect to RabbitMQ")
-
-	ch, err := conn.Channel()
-	failOnError(err, "failed to open channel")
-
-	err = ch.ExchangeDeclare("telemetry_topic", "topic", true, false, false, false, nil)
-	failOnError(err, "Failed to declare exchange")
-
-	q, err := ch.QueueDeclare(
-		"telemetry_queue",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	failOnError(err, "Failed to declare queue")
-
-	err = ch.QueueBind(
-		q.Name,
-		"telemetry.#",
-		"telemetry_topic",
-		false,
-		nil,
-	)
-	failOnError(err, "Failed to bind queue")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-
-	return &PubSub{
-		conn:          conn,
-		ch:            ch,
-		sessionID:     sessionId,
-		sessionTime:   sessionTime,
-		config:        cfg,
-		ctx:           ctx,
-		cancel:        cancel,
-		errorCh:       make(chan error, 100),
-		pointsBuffer:  make([]byte, 0, cfg.BatchSizeBytes),
-		maxBufferSize: cfg.BatchSizeBytes,
+	ps := &PubSub{
+		pool:         pool,
+		sessionID:    sessionId,
+		sessionTime:  sessionTime,
+		config:       cfg,
+		ctx:          ctx,
+		cancel:       cancel,
+		messageBatch: make([]amqp.Publishing, 0, 100),
+		maxBatchSize: 100,
+		lastFlush:    time.Now(),
 	}
+
+	ps.flushTimer = time.AfterFunc(50*time.Millisecond, ps.flushTimerCallback)
+
+	return ps
+
+	// conn, err := amqp.Dial(cfg.RabbitMQURL)
+	// failOnError(err, "Failed to connect to RabbitMQ")
+
+	// ch, err := conn.Channel()
+	// failOnError(err, "failed to open channel")
+
+	// err = ch.ExchangeDeclare("telemetry_topic", "topic", true, false, false, false, nil)
+	// failOnError(err, "Failed to declare exchange")
+
+	// q, err := ch.QueueDeclare(
+	// 	"telemetry_queue",
+	// 	true,
+	// 	false,
+	// 	false,
+	// 	false,
+	// 	nil,
+	// )
+	// failOnError(err, "Failed to declare queue")
+
+	// err = ch.QueueBind(
+	// 	q.Name,
+	// 	"telemetry.#",
+	// 	"telemetry_topic",
+	// 	false,
+	// 	nil,
+	// )
+	// failOnError(err, "Failed to bind queue")
+
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+
+	// return &PubSub{
+	// 	conn:          conn,
+	// 	ch:            ch,
+	// 	sessionID:     sessionId,
+	// 	sessionTime:   sessionTime,
+	// 	config:        cfg,
+	// 	ctx:           ctx,
+	// 	cancel:        cancel,
+	// 	errorCh:       make(chan error, 100),
+	// 	pointsBuffer:  make([]byte, 0, cfg.BatchSizeBytes),
+	// 	maxBufferSize: cfg.BatchSizeBytes,
+	// }
+}
+
+func (ps *PubSub) flushTimerCallback() {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	if len(ps.messageBatch) > 0 {
+		ps.flushBatch()
+	}
+
+	ps.flushTimer.Reset(50 * time.Millisecond)
 }
 
 func getFloatValue(record map[string]interface{}, key string) float64 {
@@ -95,15 +195,12 @@ func getFloatValue(record map[string]interface{}, key string) float64 {
 			if err == nil {
 				return f
 			}
-			log.Printf("Float parse error for key %s: %v", key, err)
 		case int:
 			return float64(v)
 		case int64:
 			return float64(v)
 		case float32:
 			return float64(v)
-		default:
-			log.Printf("Unexpected type for key %s: %T", key, v)
 		}
 	}
 	return 0.0
@@ -123,30 +220,32 @@ func getIntValue(record map[string]interface{}, key string) int {
 			if err == nil {
 				return i
 			}
-			log.Printf("Integer parse error for key %s: %v", key, err)
-		default:
-			log.Printf("Unexpected type for key %s: %T", key, v)
 		}
 	}
 	return 0
 }
 
-func (p *PubSub) Exec(data []map[string]interface{}) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
+func (ps *PubSub) Exec(data []map[string]interface{}) error {
 	if len(data) == 0 {
 		return nil
 	}
 
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	// Get worker ID from first record
 	workerID := 0
 	if len(data) > 0 {
 		if wid, ok := data[0]["workerID"]; ok {
 			if widInt, ok := wid.(int); ok {
 				workerID = widInt
+				ps.workerID = workerID
 			}
 		}
 	}
+
+	// Process all records in this batch
+	batchMessages := make([]map[string]interface{}, 0, len(data))
 
 	for _, record := range data {
 		lapID := getIntValue(record, "Lap")
@@ -173,20 +272,19 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			carID = fmt.Sprintf("%v", val)
 		}
 
-		tickTime := p.sessionTime.Add(time.Duration(sessionTime * float64(time.Second)))
+		tickTime := ps.sessionTime.Add(time.Duration(sessionTime * float64(time.Second)))
 
 		tick := map[string]interface{}{
-			"lap_id":       fmt.Sprintf("%d", lapID),
-			"speed":        getFloatValue(record, "Speed"),
-			"lap_dist_pct": getFloatValue(record, "LapDistPct"),
-			"session_id":   p.sessionID,
-			"session_num":  sessionNum,
-			"session_time": sessionTime,
-			"car_id":       carID,
-			"track_name":   trackName,
-			"track_id":     trackID,
-			"worker_id":    workerID,
-
+			"lap_id":               fmt.Sprintf("%d", lapID),
+			"speed":                getFloatValue(record, "Speed"),
+			"lap_dist_pct":         getFloatValue(record, "LapDistPct"),
+			"session_id":           ps.sessionID,
+			"session_num":          sessionNum,
+			"session_time":         sessionTime,
+			"car_id":               carID,
+			"track_name":           trackName,
+			"track_id":             trackID,
+			"worker_id":            workerID,
 			"steering_wheel_angle": getFloatValue(record, "SteeringWheelAngle"),
 			"player_car_position":  getFloatValue(record, "PlayerCarPosition"),
 			"velocity_x":           getFloatValue(record, "VelocityX"),
@@ -223,76 +321,126 @@ func (p *PubSub) Exec(data []map[string]interface{}) error {
 			"tick_time":            tickTime.UTC(),
 		}
 
-		jsonData, err := json.Marshal(tick)
-		if err != nil {
-			log.Printf("Error marshaling point to JSON: %v", err)
-			continue
-		}
-
-		if p.bufferSize == 0 {
-			p.pointsBuffer = append(p.pointsBuffer, '[')
-		} else {
-			p.pointsBuffer = append(p.pointsBuffer, ',')
-		}
-		p.pointsBuffer = append(p.pointsBuffer, jsonData...)
-		p.bufferSize++
-
-		if len(p.pointsBuffer) >= p.maxBufferSize-1000 { // Leave 1KB buffer
-			p.flushBuffer()
-		}
+		batchMessages = append(batchMessages, tick)
 	}
 
-	p.batchesLoaded++
-	// log.Printf("Worker %d: Processed %d telemetry points in session %s (batch %d, buffer size: %d)",
-	// 	workerID, len(data), p.sessionID, p.batchesLoaded, p.bufferSize)
+	// Convert to JSON array for efficient batching
+	jsonData, err := json.Marshal(batchMessages)
+	if err != nil {
+		return fmt.Errorf("error marshaling batch to JSON: %w", err)
+	}
 
-	p.flushBuffer()
+	// Create publishing message
+	publishing := amqp.Publishing{
+		ContentType:  "application/json",
+		Body:         jsonData,
+		DeliveryMode: amqp.Transient, // Use transient for maximum performance
+		Timestamp:    time.Now(),
+		Headers: amqp.Table{
+			"worker_id":  workerID,
+			"batch_size": len(data),
+			"session_id": ps.sessionID,
+		},
+	}
 
+	// Add to batch
+	ps.messageBatch = append(ps.messageBatch, publishing)
+	ps.batchSize += len(jsonData)
+	ps.totalMessages += int64(len(data))
+
+	// Flush if batch is full or large enough
+	if len(ps.messageBatch) >= ps.maxBatchSize || ps.batchSize >= ps.config.BatchSizeBytes {
+		ps.flushBatch()
+	}
+
+	ps.batchesLoaded++
 	return nil
 }
 
-func (p *PubSub) flushBuffer() {
-	if p.bufferSize == 0 {
+func (ps *PubSub) flushBatch() {
+	if len(ps.messageBatch) == 0 {
 		return
 	}
 
-	p.pointsBuffer = append(p.pointsBuffer, ']')
+	// Get channel from pool
+	ch := ps.pool.GetChannel()
 
-	err := p.ch.PublishWithContext(p.ctx, "telemetry_topic", "telemetry.ticks", true, false, amqp.Publishing{
-		ContentType: "text/plain",
-		Body:        p.pointsBuffer,
-	})
+	// Publish all messages in batch using NotifyPublish for confirms
+	confirms := ch.NotifyPublish(make(chan amqp.Confirmation, len(ps.messageBatch)))
 
-	if err != nil {
-		log.Printf("Failed to publish message: %v", err)
+	// Publish all messages
+	for _, msg := range ps.messageBatch {
+		err := ch.PublishWithContext(
+			ps.ctx,
+			"telemetry_topic",
+			"telemetry.ticks",
+			false, // mandatory - false for performance
+			false, // immediate - false for performance
+			msg,
+		)
+		if err != nil {
+			log.Printf("Failed to publish message: %v", err)
+			continue
+		}
 	}
 
-	p.pointsBuffer = p.pointsBuffer[:0]
-	p.bufferSize = 0
+	// Wait for confirms (optional - remove for maximum throughput)
+	go func() {
+		batchSize := len(ps.messageBatch)
+		confirmed := 0
+		for confirmed < batchSize {
+			select {
+			case confirm := <-confirms:
+				if !confirm.Ack {
+					log.Printf("Message not acknowledged: %d", confirm.DeliveryTag)
+				}
+				confirmed++
+			case <-time.After(5 * time.Second):
+				log.Printf("Timeout waiting for confirms, got %d/%d", confirmed, batchSize)
+				return
+			}
+		}
+	}()
+
+	// Reset batch
+	ps.messageBatch = ps.messageBatch[:0]
+	ps.batchSize = 0
+	ps.totalBatches++
+	ps.lastFlush = time.Now()
+
+	// Log performance metrics periodically
+	if ps.totalBatches%100 == 0 {
+		elapsed := time.Since(ps.lastFlush)
+		if elapsed > 0 {
+			rate := float64(ps.totalMessages) / time.Since(ps.lastFlush).Seconds()
+			log.Printf("Worker %d: Published %d messages in %d batches (%.0f msg/sec)",
+				ps.workerID, ps.totalMessages, ps.totalBatches, rate)
+		}
+	}
 }
 
-func (p *PubSub) Close() error {
-	p.mu.Lock()
-	p.flushBuffer()
-	p.mu.Unlock()
-
-	p.cancel()
-	p.wg.Wait()
-
-	if p.ch != nil {
-		p.ch.Close()
+func (ps *PubSub) Close() error {
+	// Stop timer
+	if ps.flushTimer != nil {
+		ps.flushTimer.Stop()
 	}
 
-	if p.conn != nil {
-		p.conn.Close()
-	}
+	ps.mu.Lock()
+	// Flush any remaining messages
+	ps.flushBatch()
+	ps.mu.Unlock()
 
-	log.Println("Closed RabbitMQ connection.")
+	ps.cancel()
+	ps.wg.Wait()
+
+	log.Printf("Worker %d: Closed PubSub. Total: %d messages, %d batches",
+		ps.workerID, ps.totalMessages, ps.totalBatches)
+
 	return nil
 }
 
-func (p *PubSub) Loaded() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.batchesLoaded
+func (ps *PubSub) Loaded() int {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	return ps.batchesLoaded
 }

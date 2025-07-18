@@ -20,6 +20,7 @@ type FileProcessor struct {
 	config   *config.Config
 	workerID int
 	pubSub   *messaging.PubSub
+	pool     *messaging.ConnectionPool
 }
 
 type ProcessResult struct {
@@ -29,10 +30,11 @@ type ProcessResult struct {
 	TrackName   string
 }
 
-func NewFileProcessor(cfg *config.Config, workerID int) (*FileProcessor, error) {
+func NewFileProcessor(cfg *config.Config, workerID int, pool *messaging.ConnectionPool) (*FileProcessor, error) {
 	return &FileProcessor{
 		config:   cfg,
 		workerID: workerID,
+		pool:     pool,
 	}, nil
 }
 
@@ -73,7 +75,13 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 	headers := stubs[0].Headers()
 	weekendInfo := headers.SessionInfo.WeekendInfo
 
-	fp.pubSub = messaging.NewPubSub(strconv.Itoa(weekendInfo.SubSessionID), sessionTime, fp.config)
+	// Create optimized PubSub with connection pool
+	fp.pubSub = messaging.NewPubSub(
+		strconv.Itoa(weekendInfo.SubSessionID),
+		sessionTime,
+		fp.config,
+		fp.pool,
+	)
 
 	groups := stubs.Group()
 	log.Printf("Worker %d: Grouped telemetry data into %d groups", fp.workerID, len(groups))

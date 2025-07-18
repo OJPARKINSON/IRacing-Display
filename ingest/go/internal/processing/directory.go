@@ -11,13 +11,6 @@ type Directory struct {
 	lastScan time.Time
 }
 
-type FileInfo struct {
-	fullPath string
-	size     int64
-	fileAge  time.Time
-	status   string
-}
-
 func NewDir(path string) *Directory {
 	return &Directory{
 		path: path,
@@ -40,9 +33,7 @@ func (d *Directory) WatchDir() []os.DirEntry {
 			continue
 		}
 
-		// Only process files that are at least 10 minutes old
-		// This prevents processing files that are still being written
-		if info.ModTime().Before(time.Now().Add(-(time.Minute * 10))) {
+		if info.ModTime().Before(time.Now().Add(-(time.Minute * 5))) {
 			filesToProcess = append(filesToProcess, file)
 		} else {
 			log.Printf("Skipping recent file (still being written?): %s", file.Name())
