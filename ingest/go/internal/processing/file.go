@@ -91,6 +91,7 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 			return nil, ctx.Err()
 		default:
 		}
+		log.Printf("Worker %d: Starting group %d processing", fp.workerID, groupNumber)
 
 		processor := NewLoaderProcessor(fp.pubSub, groupNumber, fp.config, fp.workerID)
 
@@ -105,6 +106,8 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 			}
 			return nil, err
 		}
+
+		log.Printf("Worker %d: Finished group %d processing", fp.workerID, groupNumber)
 
 		if err := processor.Close(); err != nil {
 			log.Printf("Worker %d: Error closing processor for group %d: %v", fp.workerID, groupNumber, err)
