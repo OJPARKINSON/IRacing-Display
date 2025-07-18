@@ -36,7 +36,8 @@ func (wp *WorkerPool) processWorkItem(ctx context.Context, workerID int, item Wo
 
 	log.Printf("Worker %d processing file: %s (retry %d)", workerID, item.FilePath, item.RetryCount)
 
-	processor, err := processing.NewFileProcessor(wp.config, workerID)
+	// Pass the connection pool to the file processor
+	processor, err := processing.NewFileProcessor(wp.config, workerID, wp.rabbitPool)
 	if err != nil {
 		wp.errorsChan <- WorkError{
 			FilePath:  item.FilePath,
