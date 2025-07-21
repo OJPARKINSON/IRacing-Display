@@ -137,7 +137,7 @@ public class InfluxService : IDisposable
                             .Field("lapLastLapTime", tel.LapLastLapTime)
                             .Field("waterTemp", tel.WaterTemp)
                             .Field("lapDeltaToBestLap", tel.LapDeltaToBestLap)
-                            .Field("lapCurrentLapTime", tel.LapCurrentLapTime)
+                            .Field("lapCurrentLapTime", tel.Lap_current_lap_time)
                             .Field("lFpressure", tel.LFpressure)
                             .Field("rFpressure", tel.RFpressure)
                             .Field("lRpressure", tel.LRpressure)
@@ -150,14 +150,8 @@ public class InfluxService : IDisposable
                     );
                 }
 
-                Console.WriteLine(
-                    $"Attempting to write {pointData.Count} points to bucket '{bucketName}' in org 'myorg'");
-                writeApi.WritePoints(pointData, bucketName, "myorg");
 
-                Console.WriteLine("Flushing data to InfluxDB...");
                 writeApi.Flush();
-
-                Console.WriteLine($"Data sent: {pointData.Count} points to bucket {bucketName}");
             }
         }
         catch (Exception ex)

@@ -92,31 +92,23 @@ public class Subscriber
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += async (_, ea) =>
         {
-            try
             {
-                var body = ea.Body.ToArray();
-                var message = Encoding.UTF8.GetString(body);
-                Console.WriteLine($"Raw message received: {message.Substring(0, Math.Min(300, message.Length))}...");
-
-
-                List<TelemetryData> telemetryData = _telemetryService.Parse(message);
-
-                if (telemetryData.Count > 0)
+                try
                 {
-                    Console.WriteLine($"Parsed lap_id: '{telemetryData[0].Lap_id}' from first record");
+                    var body = ea.Body.ToArray();
+                    var message = Encoding.UTF8.GetString(body);
+
+                    List<TelemetryData> telemetryData = _telemetryService.Parse(message);
+
+                    await _influxService.WriteTicks(telemetryData);
                 }
-
-
-                await _influxService.WriteTicks(telemetryData);
-                Console.WriteLine($"Successfully processed {telemetryData.Count} telemetry points");
-
-
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error processing message: {ex.Message}");
+                    Console.WriteLine($"Exception details: {ex}");
+                }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error processing message: {ex.Message}");
-                Console.WriteLine($"Exception details: {ex}");
-            }
+            ;
         };
 
         await channel.BasicConsumeAsync(
