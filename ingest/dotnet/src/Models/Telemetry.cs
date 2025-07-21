@@ -1,6 +1,6 @@
 namespace ingest.Models;
 
-public struct TelemetryData
+public struct TelemetryData2
 {
     public float? Gear { get; set; }
     public float IsOnTrackCar { get; set; }
