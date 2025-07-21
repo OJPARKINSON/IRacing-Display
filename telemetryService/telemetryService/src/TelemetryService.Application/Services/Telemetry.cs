@@ -27,7 +27,7 @@ public class Telemetry
                 var dataArray = JsonConvert.DeserializeObject<List<TelemetryData>>(input, JsonSettings);
                 if (dataArray != null && dataArray.Count > 0)
                 {
-                    Console.WriteLine($"Successfully parsed {dataArray.Count} data points from JSON array");
+                    Console.WriteLine($"Successfully parsed {dataArray} data points from JSON array");
                     return dataArray;
                 }
             }

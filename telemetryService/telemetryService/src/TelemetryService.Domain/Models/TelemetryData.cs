@@ -10,7 +10,7 @@ public class TelemetryData
     public string? Track_id { get; set; }
     public double Lap_current_lap_time { get; set; }
     public double Lap_dist_pct { get; set; }
-    public string? Lap_id { get; set; }
+    public string Lap_id { get; set; }
     public double Lat { get; set; }
     public double Lon { get; set; }
     public int Player_car_position { get; set; }

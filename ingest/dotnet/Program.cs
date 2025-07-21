@@ -39,8 +39,7 @@ namespace ingest
             
             void OnTelemetryUpdate(object? sender, TelemetryData e)
             {
-                logger.LogInformation($"lap: {e.Lap}, session_time: {e.SessionTime}, lap_dist_pct: {e.LapDistPct}, speed: {e.Speed}");
-                ps.Publish(e, _trackName, _trackId, _sessionId);
+                ps.Publish(logger, e, _trackName, _trackId, _sessionId);
             }
 
             void OnSessionInfoUpdate(object? sender, TelemetrySessionInfo e)
