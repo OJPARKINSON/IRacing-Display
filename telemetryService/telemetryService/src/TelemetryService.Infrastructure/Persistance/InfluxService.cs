@@ -98,6 +98,7 @@ public class InfluxService : IDisposable
 
                 foreach (var tel in telData)
                 {
+
                     pointData.Add(
                         PointData
                             .Measurement("telemetry_ticks")

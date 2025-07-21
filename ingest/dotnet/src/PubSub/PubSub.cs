@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using SVappsLAB.iRacingTelemetrySDK;
 using RabbitMQ.Client;
 
@@ -31,7 +32,8 @@ class PubSub
         }
     }
 
-    public async void Publish(TelemetryData data, string trackName = "", string trackId = "", int sessionId = 0)
+
+    public async void Publish(ILogger logger, TelemetryData data, string trackName = "", string trackId = "", int sessionId = 0)
     {
         try
         {
@@ -94,6 +96,8 @@ class PubSub
                 rRtempM = data.RRtempM,
                 tick_time = DateTime.UtcNow
             };
+            
+            
             var tickArray = new[] { tick };
 
             string jsonString = JsonSerializer.Serialize(tickArray, new JsonSerializerOptions
