@@ -104,12 +104,6 @@ type PubSub struct {
 	lastFlush     time.Time
 }
 
-func failOnError(err error, msg string) {
-	if err != nil {
-		log.Panicf("%s: %s", msg, err)
-	}
-}
-
 func NewPubSub(sessionId string, sessionTime time.Time, cfg *config.Config, pool *ConnectionPool) *PubSub {
 	log.Printf("Connecting to RabbitMQ at %s", cfg.RabbitMQURL)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -129,49 +123,6 @@ func NewPubSub(sessionId string, sessionTime time.Time, cfg *config.Config, pool
 	ps.flushTimer = time.AfterFunc(50*time.Millisecond, ps.flushTimerCallback)
 
 	return ps
-
-	// conn, err := amqp.Dial(cfg.RabbitMQURL)
-	// failOnError(err, "Failed to connect to RabbitMQ")
-
-	// ch, err := conn.Channel()
-	// failOnError(err, "failed to open channel")
-
-	// err = ch.ExchangeDeclare("telemetry_topic", "topic", true, false, false, false, nil)
-	// failOnError(err, "Failed to declare exchange")
-
-	// q, err := ch.QueueDeclare(
-	// 	"telemetry_queue",
-	// 	true,
-	// 	false,
-	// 	false,
-	// 	false,
-	// 	nil,
-	// )
-	// failOnError(err, "Failed to declare queue")
-
-	// err = ch.QueueBind(
-	// 	q.Name,
-	// 	"telemetry.#",
-	// 	"telemetry_topic",
-	// 	false,
-	// 	nil,
-	// )
-	// failOnError(err, "Failed to bind queue")
-
-	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-
-	// return &PubSub{
-	// 	conn:          conn,
-	// 	ch:            ch,
-	// 	sessionID:     sessionId,
-	// 	sessionTime:   sessionTime,
-	// 	config:        cfg,
-	// 	ctx:           ctx,
-	// 	cancel:        cancel,
-	// 	errorCh:       make(chan error, 100),
-	// 	pointsBuffer:  make([]byte, 0, cfg.BatchSizeBytes),
-	// 	maxBufferSize: cfg.BatchSizeBytes,
-	// }
 }
 
 func (ps *PubSub) flushTimerCallback() {

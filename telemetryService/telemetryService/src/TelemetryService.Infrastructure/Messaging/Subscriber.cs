@@ -96,8 +96,15 @@ public class Subscriber
             {
                 var body = ea.Body.ToArray();
                 var message = Encoding.UTF8.GetString(body);
+                Console.WriteLine($"Raw message received: {message.Substring(0, Math.Min(300, message.Length))}...");
+
 
                 List<TelemetryData> telemetryData = _telemetryService.Parse(message);
+
+                if (telemetryData.Count > 0)
+                {
+                    Console.WriteLine($"Parsed lap_id: '{telemetryData[0].Lap_id}' from first record");
+                }
 
 
                 await _influxService.WriteTicks(telemetryData);
