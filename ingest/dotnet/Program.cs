@@ -20,9 +20,6 @@ namespace ingest
                 .Create(builder => builder.AddConsole().AddSimpleConsole(o => o.SingleLine = true))
                 .CreateLogger("logger");
 
-            Console.WriteLine(Path.GetFullPath("./"));
-
-
             var ibtOptions =
                 new IBTOptions(@"./ibt_files/mclaren720sgt3_monza full 2025-02-09 12-58-11.ibt", int.MaxValue);
 
