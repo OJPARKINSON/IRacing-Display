@@ -4,6 +4,7 @@ using ingest.Models;
 using System;
 using System.IO;
 using SVappsLAB.iRacingTelemetrySDK.Models;
+using ingest.PubSub;
 
 namespace ingest
 {
@@ -18,7 +19,7 @@ namespace ingest
         private static string _trackName = "";
         private static string _trackId = "";
         private static int _sessionId = 1;
-        
+
         private static async Task Main(string[] args)
         {
             var logger = LoggerFactory
@@ -28,15 +29,37 @@ namespace ingest
             var ibtOptions =
                 new IBTOptions(@"./ibt_files/mclaren720sgt3_monza full 2025-02-09 12-58-11.ibt", int.MaxValue);
 
-            var ps = new PubSub.PubSub();
-            
+            var ps = new BufferedPubSub(
+                maxBatchSize: 1000,           // Max points per batch
+                maxBatchBytes: 250000,        // 250KB max batch size (like Go)
+                flushInterval: TimeSpan.FromMilliseconds(50) // 50ms flush interval (like Go)
+            );
+
             using var telemetryClient = TelemetryClient<TelemetryData>.Create(logger: logger, ibtOptions: ibtOptions);
 
             telemetryClient.OnSessionInfoUpdate += OnSessionInfoUpdate;
             telemetryClient.OnTelemetryUpdate += OnTelemetryUpdate;
-            await telemetryClient.Monitor(CancellationToken.None);
 
-            
+            Console.CancelKeyPress += (sender, e) =>
+            {
+                e.Cancel = true;
+                logger.LogInformation("Shutdown requested. Flushing remaining data...");
+                ps.ForceFlush(_sessionId).Wait();
+                ps.Dispose();
+                Environment.Exit(0);
+            };
+
+            try
+            {
+                await telemetryClient.Monitor(CancellationToken.None);
+            }
+            finally
+            {
+                logger.LogInformation("Telemetry monitoring completed. Final flush...");
+                await ps.ForceFlush(_sessionId);
+                ps.Dispose();
+            }
+
             void OnTelemetryUpdate(object? sender, TelemetryData e)
             {
                 ps.Publish(logger, e, _trackName, _trackId, _sessionId);
@@ -48,9 +71,10 @@ namespace ingest
                 if (weekendInfo != null)
                 {
                     _trackName = weekendInfo.TrackDisplayShortName ?? "";
+                    _trackName = _trackName.Replace(" ", "-"); 
                     _trackId = weekendInfo.TrackID.ToString() ?? "";
                     _sessionId = weekendInfo.SubSessionID;
-                    
+
                     logger.LogInformation($"Track Name: {_trackName}, Session ID: {_sessionId}");
                 }
 
@@ -61,9 +85,9 @@ namespace ingest
                     {
                         sessionIndex = 2;
                     }
-                    
+
                     var selectedSession = e.SessionInfo.Sessions[sessionIndex];
-                    
+
                     logger.LogInformation($"SessionIndex: {sessionIndex}");
                 }
                 else
@@ -71,8 +95,6 @@ namespace ingest
                     logger.LogInformation($"No sessions found");
                 }
             }
-
         }
-
     }
 }

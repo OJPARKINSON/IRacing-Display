@@ -27,11 +27,6 @@ services:
         hard: 65536
     networks:
       - telemetry-network
-    deploy:
-      resources:
-        limits:
-          cpus: 1
-          memory: 1g
 
   rabbitMQ:
     container_name: rabbitMQ
@@ -54,11 +49,6 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
-    deploy:
-      resources:
-        limits:
-          cpus: 1
-          memory: 2g
 
   telemetry_service:
     build: ./telemetryService/telemetryService
@@ -82,11 +72,6 @@ services:
       ASPNETCORE_URLS: http://+:5000
       DOTNET_GCRetainVM: 1
       DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: true
-    deploy:
-      resources:
-        limits:
-          cpus: 1
-          memory: 2g
     labels:
       com.centurylinklabs.watchtower.enable: "true"
 
@@ -107,11 +92,6 @@ services:
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     networks:
       - telemetry-network
-    deploy:
-      resources:
-        limits:
-          cpus: 1
-          memory: 2g
 
   watchtower:
     image: containrrr/watchtower
@@ -125,11 +105,6 @@ services:
       - WATCHTOWER_NOTIFICATION_URL=generic://?template=text
       - TZ=Europe/London
       - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_DOCKER_TOKEN}
-    deploy:
-      resources:
-        limits:
-          cpus: 0.5
-          memory: 1g
 
 volumes:
   influxdb2-data:

@@ -80,15 +80,15 @@ interface RawTelemetryData {
 	player_car_position?: number;
 	track_name?: string;
 	session_num?: string;
-	lat_accel?: number;       // Maps to LatAccel
-	long_accel?: number;      // Maps to LongAccel  
-	vert_accel?: number;      // Maps to VertAccel
-	alt?: number;             // Maps to Alt
-	velocity_z?: number;      // Maps to VelocityZ
-	pitch?: number;           // Maps to Pitch
-	roll?: number;            // Maps to Roll
-	yaw?: number;             // Maps to Yaw
-	yaw_north?: number;       // Maps to YawNorth
+	lat_accel?: number;
+	long_accel?: number;
+	vert_accel?: number;
+	alt?: number;
+	velocity_z?: number;
+	pitch?: number;
+	roll?: number;
+	yaw?: number;
+	yaw_north?: number;
 }
 
 // Type for telemetry response from API
