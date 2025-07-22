@@ -26,43 +26,57 @@ class BufferedPubSub : IDisposable
     private long _totalBatchesSent;
     private DateTime _lastFlush = DateTime.UtcNow;
 
+    private readonly CancellationTokenSource _cancellationTokenSource = new();
+
     public BufferedPubSub(
         int maxBatchSize = 1000,
-        int maxBatchBytes = 250000, // 250KB like Go version
+        int maxBatchBytes = 250000,
         TimeSpan? flushInterval = null)
     {
         _maxBatchSize = maxBatchSize;
         _maxBatchBytes = maxBatchBytes;
-        _flushInterval = flushInterval ?? TimeSpan.FromMilliseconds(50); // 50ms like Go
+        _flushInterval = flushInterval ?? TimeSpan.FromMilliseconds(50);
 
-        // Start the flush timer
         _flushTimer = new Timer(FlushTimerCallback, null, _flushInterval, _flushInterval);
         
         Console.WriteLine($"BufferedPubSub initialized: maxBatch={_maxBatchSize}, maxBytes={_maxBatchBytes}, flushInterval={_flushInterval.TotalMilliseconds}ms");
     }
+
     public async Task InitializeAsync()
     {
-        if (_isConnected) return;
+        if (_isConnected || _disposed) return;
 
         lock (_lockObject)
         {
-            if (_isConnected) return;
+            if (_isConnected || _disposed) return;
 
-            var factory = new ConnectionFactory();
-            factory.Uri = new Uri("amqp://guest:guest@localhost:5672/");
+            try
+            {
+                var factory = new ConnectionFactory();
+                factory.Uri = new Uri("amqp://guest:guest@localhost:5672/");
 
-            _connection = factory.CreateConnectionAsync().Result;
-            _channel = _connection.CreateChannelAsync(null).Result;
+                _connection = factory.CreateConnectionAsync().Result;
+                _channel = _connection.CreateChannelAsync(null).Result;
 
-            _isConnected = true;
-            Console.WriteLine("RabbitMQ connection established and reused for all messages");
+                _isConnected = true;
+                Console.WriteLine("RabbitMQ connection established and reused for all messages");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to initialize RabbitMQ connection: {ex.Message}");
+                _isConnected = false;
+                throw;
+            }
         }
     }
 
-
     public async void Publish(ILogger logger, TelemetryData data, string trackName = "", string trackId = "", int sessionId = 0)
     {
-        if (_disposed) return;
+        if (_disposed || _cancellationTokenSource.Token.IsCancellationRequested) 
+        {
+            logger.LogWarning("Publish called after disposal or cancellation");
+            return;
+        }
 
         try
         {
@@ -74,7 +88,6 @@ class BufferedPubSub : IDisposable
                 return;
             }
 
-            // Create the tick object (same as before)
             var tick = new
             {
                 lap_id = data.Lap.ToString(),
@@ -123,7 +136,6 @@ class BufferedPubSub : IDisposable
                 tick_time = DateTime.UtcNow
             };
 
-            // Add to buffer instead of sending immediately
             await BufferTick(tick, sessionId);
         }
         catch (Exception ex)
@@ -135,6 +147,8 @@ class BufferedPubSub : IDisposable
 
     private async Task BufferTick(object tick, int sessionId)
     {
+        if (_disposed || _cancellationTokenSource.Token.IsCancellationRequested) return;
+
         bool shouldFlush = false;
         
         lock (_lockObject)
@@ -145,7 +159,6 @@ class BufferedPubSub : IDisposable
             _currentBufferBytes += EstimateTickSize(tick);
             _totalPointsBuffered++;
 
-            // Check if we should flush immediately (size-based flushing)
             shouldFlush = _buffer.Count >= _maxBatchSize || _currentBufferBytes >= _maxBatchBytes;
             
             if (_buffer.Count % 500 == 0)
@@ -163,24 +176,25 @@ class BufferedPubSub : IDisposable
 
     private void FlushTimerCallback(object? state)
     {
-        if (_disposed) return;
+        if (_disposed || _cancellationTokenSource.Token.IsCancellationRequested) return;
 
-        // Run flush asynchronously without blocking the timer
         _ = Task.Run(async () =>
         {
             try
             {
-                await FlushBuffer(1); // Default session ID for timer flushes
+                await FlushBuffer(1);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error in timer-triggered flush: {ex.Message}");
             }
-        });
+        }, _cancellationTokenSource.Token);
     }
 
     private async Task FlushBuffer(int sessionId)
     {
+        if (_disposed || _cancellationTokenSource.Token.IsCancellationRequested) return;
+
         List<object> dataToFlush;
 
         lock (_lockObject)
@@ -188,7 +202,6 @@ class BufferedPubSub : IDisposable
             if (_disposed || _buffer.Count == 0)
                 return;
 
-            // Copy buffer contents and clear
             dataToFlush = new List<object>(_buffer);
             _buffer.Clear();
             _currentBufferBytes = 0;
@@ -204,7 +217,6 @@ class BufferedPubSub : IDisposable
                 _lastFlush = DateTime.UtcNow;
             }
 
-            // Log metrics periodically (every 100 batches like Go)
             if (_totalBatchesSent % 100 == 0)
             {
                 var elapsed = DateTime.UtcNow - _lastFlush;
@@ -218,29 +230,20 @@ class BufferedPubSub : IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"ERROR flushing buffer to RabbitMQ: {ex.Message}");
-            
-            // Optionally: Add failed data back to buffer for retry
-            // lock (_lockObject)
-            // {
-            //     _buffer.InsertRange(0, dataToFlush);
-            //     _currentBufferBytes += dataToFlush.Sum(EstimateTickSize);
-            // }
         }
     }
 
     private async Task SendBatchToRabbitMQ(List<object> batch, int sessionId)
     {
-        if (batch.Count == 0 || _channel == null) return;
+        if (batch.Count == 0 || _channel == null || _disposed) return;
 
         try
         {
-            // Create headers
             Dictionary<string, object?> headers = new Dictionary<string, object?>();
             headers.Add("worker_id", 1);
             headers.Add("batch_size", batch.Count);
             headers.Add("session_id", sessionId);
 
-            // Serialize the entire batch as JSON array (like Go version)
             string jsonString = JsonSerializer.Serialize(batch, new JsonSerializerOptions
             {
                 WriteIndented = false
@@ -255,9 +258,13 @@ class BufferedPubSub : IDisposable
             props.Headers = headers;
 
             await _channel.BasicPublishAsync("telemetry_topic", "telemetry.ticks", false, props, messageBodyBytes,
-                new CancellationToken());
+                _cancellationTokenSource.Token);
 
             Console.WriteLine($"Sent batch of {batch.Count} points ({messageBodyBytes.Length} bytes) to RabbitMQ");
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("Batch sending was cancelled");
         }
         catch (Exception ex)
         {
@@ -268,14 +275,16 @@ class BufferedPubSub : IDisposable
 
     private static int EstimateTickSize(object tick)
     {
-        // Rough estimation - similar to Go version
-        // Each tick is approximately 500-800 bytes when serialized
-        return 600; // Conservative estimate
+        return 600;
     }
 
     public async Task ForceFlush(int sessionId = 1)
     {
+        if (_disposed) return;
+        
+        Console.WriteLine("Force flushing remaining data...");
         await FlushBuffer(sessionId);
+        Console.WriteLine("Force flush completed");
     }
 
     public void Dispose()
@@ -284,13 +293,31 @@ class BufferedPubSub : IDisposable
         
         _disposed = true;
         
-        // Stop the timer
-        _flushTimer?.Dispose();
+        Console.WriteLine("Starting BufferedPubSub disposal...");
         
-        // Flush any remaining data
+        _cancellationTokenSource.Cancel();
+        
         try
         {
-            ForceFlush().Wait(TimeSpan.FromSeconds(5));
+            _flushTimer?.Dispose();
+            Console.WriteLine("Timer disposed");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error disposing timer: {ex.Message}");
+        }
+        
+        try
+        {
+            var flushTask = ForceFlush();
+            if (flushTask.Wait(TimeSpan.FromSeconds(3)))
+            {
+                Console.WriteLine("Final flush completed successfully");
+            }
+            else
+            {
+                Console.WriteLine("Final flush timed out");
+            }
         }
         catch (Exception ex)
         {
@@ -299,11 +326,38 @@ class BufferedPubSub : IDisposable
         
         lock (_lockObject)
         {
-            _channel?.CloseAsync().Wait();
-            _connection?.CloseAsync().Wait();
-            _channel?.Dispose();
-            _connection?.Dispose();
+            try
+            {
+                _channel?.CloseAsync().Wait(TimeSpan.FromSeconds(2));
+                _channel?.Dispose();
+                Console.WriteLine("Channel closed and disposed");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing channel: {ex.Message}");
+            }
+            
+            try
+            {
+                _connection?.CloseAsync().Wait(TimeSpan.FromSeconds(2));
+                _connection?.Dispose();
+                Console.WriteLine("Connection closed and disposed");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing connection: {ex.Message}");
+            }
+            
             _isConnected = false;
+        }
+        
+        try
+        {
+            _cancellationTokenSource.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error disposing cancellation token source: {ex.Message}");
         }
         
         Console.WriteLine($"BufferedPubSub disposed. Final stats: {_totalPointsBuffered} points, {_totalBatchesSent} batches");

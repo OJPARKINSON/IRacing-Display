@@ -68,7 +68,7 @@ public class InfluxService : IDisposable
                         return;
                     }
 
-                    var orgId = orgs.First().Id;
+                    string orgId = orgs.First().Id;
                     Console.WriteLine($"Using organization ID: {orgId}");
 
                     var bucket = await bucketsApi.CreateBucketAsync(bucketName, orgId);
@@ -96,13 +96,15 @@ public class InfluxService : IDisposable
 
                 List<PointData> pointData = [];
 
+
                 foreach (var tel in telData)
                 {
+                    Console.WriteLine($"DEBUG: Writing lap_id: '{tel.Lap_id}' for session: '{tel.Session_id}'");
 
                     pointData.Add(
                         PointData
                             .Measurement("telemetry_ticks")
-                            .Tag("lap_id", tel.Lap_id)
+                            .Tag("lap_id", tel.Lap_id ?? "unknown")
                             .Tag("session_id", tel.Session_id)
                             .Tag("session_num", tel.Session_num)
                             .Tag("car_id", tel.Car_id)
@@ -151,6 +153,7 @@ public class InfluxService : IDisposable
                 }
 
 
+                writeApi.WritePoints(pointData, bucketName, "myorg");
                 writeApi.Flush();
             }
         }
