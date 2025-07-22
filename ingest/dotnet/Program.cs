@@ -19,6 +19,8 @@ namespace ingest
         private static string _trackName = "";
         private static string _trackId = "";
         private static int _sessionId = 1;
+        private static bool _shutdownRequested = false;
+        private static readonly object _shutdownLock = new object();
 
         private static async Task Main(string[] args)
         {
@@ -30,69 +32,145 @@ namespace ingest
                 new IBTOptions(@"./ibt_files/mclaren720sgt3_monza full 2025-02-09 12-58-11.ibt", int.MaxValue);
 
             var ps = new BufferedPubSub(
-                maxBatchSize: 1000,           // Max points per batch
-                maxBatchBytes: 250000,        // 250KB max batch size (like Go)
-                flushInterval: TimeSpan.FromMilliseconds(50) // 50ms flush interval (like Go)
+                maxBatchSize: 1000,
+                maxBatchBytes: 250000,
+                flushInterval: TimeSpan.FromMilliseconds(50)
             );
 
-            using var telemetryClient = TelemetryClient<TelemetryData>.Create(logger: logger, ibtOptions: ibtOptions);
+            ITelemetryClient<TelemetryData>? telemetryClient = null;
 
-            telemetryClient.OnSessionInfoUpdate += OnSessionInfoUpdate;
-            telemetryClient.OnTelemetryUpdate += OnTelemetryUpdate;
+            using var cts = new CancellationTokenSource();
 
             Console.CancelKeyPress += (sender, e) =>
             {
-                e.Cancel = true;
-                logger.LogInformation("Shutdown requested. Flushing remaining data...");
-                ps.ForceFlush(_sessionId).Wait();
-                ps.Dispose();
-                Environment.Exit(0);
+                lock (_shutdownLock)
+                {
+                    if (_shutdownRequested)
+                    {
+                        logger.LogWarning("Force shutdown requested!");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    _shutdownRequested = true;
+                    e.Cancel = true;
+
+                    logger.LogInformation("Shutdown requested. Gracefully shutting down...");
+                    cts.Cancel();
+                }
             };
 
             try
             {
-                await telemetryClient.Monitor(CancellationToken.None);
+                telemetryClient = TelemetryClient<TelemetryData>.Create(logger: logger, ibtOptions: ibtOptions);
+
+                telemetryClient.OnSessionInfoUpdate += OnSessionInfoUpdate;
+                telemetryClient.OnTelemetryUpdate += (sender, e) => OnTelemetryUpdate(sender, e, ps, logger);
+
+                logger.LogInformation("Starting telemetry monitoring...");
+
+                await telemetryClient.Monitor(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                logger.LogInformation("Telemetry monitoring was cancelled");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error during telemetry monitoring");
             }
             finally
             {
-                logger.LogInformation("Telemetry monitoring completed. Final flush...");
-                await ps.ForceFlush(_sessionId);
-                ps.Dispose();
+                logger.LogInformation("Performing final cleanup...");
+
+                try
+                {
+                    using var flushCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    await ps.ForceFlush(_sessionId);
+                    logger.LogInformation("Final flush completed");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error during final flush");
+                }
+
+                try
+                {
+                    ps.Dispose();
+                    logger.LogInformation("PubSub disposed");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error disposing PubSub");
+                }
+
+                try
+                {
+                    telemetryClient?.Dispose();
+                    logger.LogInformation("Telemetry client disposed");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error disposing telemetry client");
+                }
+
+                logger.LogInformation("Application shutdown complete");
             }
 
-            void OnTelemetryUpdate(object? sender, TelemetryData e)
+            void OnTelemetryUpdate(object? sender, TelemetryData e, BufferedPubSub pubSub, ILogger log)
             {
-                ps.Publish(logger, e, _trackName, _trackId, _sessionId);
+                if (_shutdownRequested)
+                {
+                    log.LogInformation("Ignoring telemetry update due to shutdown request");
+                    return;
+                }
+
+                try
+                {
+                    pubSub.Publish(log, e, _trackName, _trackId, _sessionId);
+                }
+                catch (Exception ex)
+                {
+                    log.LogError(ex, "Error publishing telemetry data");
+                }
             }
 
             void OnSessionInfoUpdate(object? sender, TelemetrySessionInfo e)
             {
-                var weekendInfo = e.WeekendInfo;
-                if (weekendInfo != null)
-                {
-                    _trackName = weekendInfo.TrackDisplayShortName ?? "";
-                    _trackName = _trackName.Replace(" ", "-"); 
-                    _trackId = weekendInfo.TrackID.ToString() ?? "";
-                    _sessionId = weekendInfo.SubSessionID;
+                if (_shutdownRequested) return;
 
-                    logger.LogInformation($"Track Name: {_trackName}, Session ID: {_sessionId}");
-                }
-
-                if (e.SessionInfo?.Sessions != null && e.SessionInfo.Sessions.Count > 0)
+                try
                 {
-                    int sessionIndex = 0;
-                    if (e.SessionInfo.Sessions.Count > 2)
+                    var weekendInfo = e.WeekendInfo;
+                    if (weekendInfo != null)
                     {
-                        sessionIndex = 2;
+                        _trackName = weekendInfo.TrackDisplayShortName ?? "";
+                        _trackName = _trackName.Replace(" ", "-");
+                        _trackId = weekendInfo.TrackID.ToString() ?? "";
+                        _sessionId = weekendInfo.SubSessionID;
+
+                        logger.LogInformation($"Track Name: {_trackName}, Session ID: {_sessionId}");
                     }
 
-                    var selectedSession = e.SessionInfo.Sessions[sessionIndex];
+                    if (e.SessionInfo?.Sessions != null && e.SessionInfo.Sessions.Count > 0)
+                    {
+                        int sessionIndex = 0;
+                        if (e.SessionInfo.Sessions.Count > 2)
+                        {
+                            sessionIndex = 2;
+                        }
 
-                    logger.LogInformation($"SessionIndex: {sessionIndex}");
+                        var selectedSession = e.SessionInfo.Sessions[sessionIndex];
+                        logger.LogInformation($"SessionIndex: {sessionIndex}");
+                    }
+                    else
+                    {
+                        logger.LogInformation($"No sessions found");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    logger.LogInformation($"No sessions found");
+                    logger.LogError(ex, "Error in session info update");
                 }
             }
         }

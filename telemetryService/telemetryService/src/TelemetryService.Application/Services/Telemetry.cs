@@ -48,6 +48,7 @@ public class Telemetry
                     var data = JsonConvert.DeserializeObject<TelemetryData>(json, JsonSettings);
                     if (data != null)
                     {
+                        Console.WriteLine($"DEBUG: Parsed lap_id: '{data.Lap_id}', session_id: '{data.Session_id}'");
                         results.Add(data);
                     }
                 }
