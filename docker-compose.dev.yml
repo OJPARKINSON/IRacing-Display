@@ -66,6 +66,7 @@ services:
     environment:
       INFLUXDB_URL: ${INFLUXDB_URL}
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      QUESTDB_URL: ${QUESTDB_URL}
       INFLUX_BUCKET: telemetry
       INFLUX_ORG: myorg
       DOTNET_ENVIRONMENT: Development

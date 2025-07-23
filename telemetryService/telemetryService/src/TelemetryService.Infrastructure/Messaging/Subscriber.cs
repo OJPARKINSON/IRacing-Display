@@ -13,12 +13,14 @@ public class Subscriber
     private const int MaxRetryAttempts = 10;
     private const int RetryDelayMs = 5000;
     private readonly InfluxService _influxService;
+    private readonly QuestDbService _questDbService;
     private readonly Telemetry _telemetryService;
 
-    public Subscriber(Telemetry telemetryService, InfluxService influxService)
+    public Subscriber(Telemetry telemetryService, InfluxService influxService, QuestDbService questDbService)
     {
         _telemetryService = telemetryService;
         _influxService = influxService;
+        _questDbService = questDbService;
     }
 
     public async Task SubscribeAsync()
@@ -101,6 +103,7 @@ public class Subscriber
                     List<TelemetryData> telemetryData = _telemetryService.Parse(message);
 
                     await _influxService.WriteTicks(telemetryData);
+                    await _questDbService.WriteTick(telemetryData);
                 }
                 catch (Exception ex)
                 {
