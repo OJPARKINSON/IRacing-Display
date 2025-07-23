@@ -2,6 +2,7 @@ using CsvHelper;
 using InfluxDB.Client;
 using InfluxDB.Client.Api.Domain;
 using InfluxDB.Client.Writes;
+using QuestDB;
 using TelemetryService.Domain.Models;
 
 namespace TelemetryService.Infrastructure.Persistence;
@@ -88,6 +89,23 @@ public class InfluxService : IDisposable
             }
         }
 
+        // try
+        // {
+
+        //     using var sender = Sender.New("http::addr=localhost:9000;");
+        //     await sender.Table("telemetry")
+        //         .Symbol("symbol", "ETH-USD")
+        //         .Symbol("side", "sell")
+        //         .Column("price", 2615.54)
+        //         .Column("amount", 0.00044)
+        //         .AtAsync(DateTime.UtcNow);
+        //     await sender.SendAsync();
+        // }
+        // catch (Exception ex)
+        // {
+        //     Console.WriteLine(ex);
+        // }
+
         try
         {
             using (var writeApi = _client.GetWriteApi())
@@ -99,8 +117,6 @@ public class InfluxService : IDisposable
 
                 foreach (var tel in telData)
                 {
-                    Console.WriteLine($"DEBUG: Writing lap_id: '{tel.Lap_id}' for session: '{tel.Session_id}'");
-
                     pointData.Add(
                         PointData
                             .Measurement("telemetry_ticks")

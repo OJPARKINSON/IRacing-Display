@@ -8,6 +8,7 @@
     <ItemGroup>
         <PackageReference Include="InfluxDB.Client" Version="4.18.0" />
         <PackageReference Include="RabbitMQ.Client" Version="7.1.2" />
+        <PackageReference Include="net-questdb-client" Version="3.0.0" />
     </ItemGroup>
 
     <ItemGroup>

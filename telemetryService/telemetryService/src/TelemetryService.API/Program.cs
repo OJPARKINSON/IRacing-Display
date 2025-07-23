@@ -29,6 +29,7 @@ builder.Services.AddCors(options =>
 // Register telemetry services
 builder.Services.AddSingleton<Telemetry>();
 builder.Services.AddSingleton<InfluxService>();
+builder.Services.AddSingleton<QuestDbService>();
 builder.Services.AddSingleton<Subscriber>();
 
 // Add background service for RabbitMQ processing
