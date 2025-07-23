@@ -93,6 +93,26 @@ services:
     networks:
       - telemetry-network
 
+  questdb:
+    image: questdb/questdb:latest
+    container_name: questdb_quickstart
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "8812:8812"
+    volumes:
+      - questdb-data:/root/.questdb
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - telemetry-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/status" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   watchtower:
     image: containrrr/watchtower
     container_name: watchtower
@@ -110,6 +130,7 @@ volumes:
   influxdb2-data:
   influxdb2-config:
   rabbitmq-data:
+  questdb-data:
 
 
 networks:
