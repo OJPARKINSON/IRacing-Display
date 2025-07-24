@@ -1,21 +1,9 @@
+import { QueryResult } from "pg";
 import { TelemetryDataPoint, TelemetryResponse } from "./types";
 
-export const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-export const telemetryFetcher = (url: string) => {
-	return fetch(url).then(async (r) => {
-		if (!r.ok) {
-			throw new Error(`Failed to fetch telemetry data: ${r.statusText}`);
-		} else {
-			const data = await r.json();
-			return processIRacingDataWithGPS(data);
-		}
-	});
-};
-
-const processIRacingDataWithGPS = (data: TelemetryResponse) => {
-	// First, process the basic iRacing data
-	const sortedData = [...data.data].sort((a, b) => {
+export const processIRacingDataWithGPS = ({ rows }: QueryResult<any>) => {
+	const sortedData = [...rows].sort((a, b) => {
 		const timeA = a.session_time !== undefined ? a.session_time : 0;
 		const timeB = b.session_time !== undefined ? b.session_time : 0;
 		return timeA - timeB;
@@ -64,11 +52,23 @@ const processIRacingDataWithGPS = (data: TelemetryResponse) => {
 		YawNorth: d.yaw_north || 0,
 	}));
 
-	// Now process GPS data if available
 	return processGPSTelemetryData(processedData);
 };
 
-const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]) => {
+interface TrackBounds {
+	minLat: number,
+	maxLat: number,
+	minLon: number,
+	maxLon: number
+}
+
+export interface TelemetryRes {
+	dataWithGPSCoordinates: null | any[],
+	trackBounds: TrackBounds | null,
+	processError: string | null,
+}
+
+const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]): TelemetryRes => {
 	if (!telemetry?.length) {
 		return {
 			dataWithGPSCoordinates: [],
@@ -78,7 +78,6 @@ const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]) => {
 	}
 
 	try {
-		// Filter out points with invalid GPS coordinates
 		const validGPSData = telemetry.filter(
 			(point) =>
 				point.Lat &&
@@ -97,26 +96,22 @@ const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]) => {
 			};
 		}
 
-		// Calculate track bounds
 		const lats = validGPSData.map((p) => p.Lat);
 		const lons = validGPSData.map((p) => p.Lon);
 
-		const trackBounds = {
+		const trackBounds: TrackBounds = {
 			minLat: Math.min(...lats),
 			maxLat: Math.max(...lats),
 			minLon: Math.min(...lons),
 			maxLon: Math.max(...lons),
 		};
 
-		// Calculate speed normalization values
 		const speeds = validGPSData.map(p => p.Speed).filter(s => s > 0);
 		const minSpeed = Math.min(...speeds);
 		const maxSpeed = Math.max(...speeds);
 		const speedRange = maxSpeed - minSpeed;
 
-		// Process and enhance the telemetry data
 		const processedData = validGPSData.map((point, index) => {
-			// Calculate distance from previous point
 			let distanceFromPrev = 0;
 			if (index > 0) {
 				const prevPoint = validGPSData[index - 1];
@@ -128,7 +123,6 @@ const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]) => {
 				);
 			}
 
-			// Calculate speed from GPS if velocity data is missing
 			let calculatedSpeed = point.Speed;
 			if (
 				!calculatedSpeed &&
@@ -143,7 +137,6 @@ const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]) => {
 				}
 			}
 
-			// Calculate heading/bearing if velocity data is missing
 			let heading = 0;
 			if (index > 0) {
 				const prevPoint = validGPSData[index - 1];
@@ -155,10 +148,8 @@ const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]) => {
 				);
 			}
 
-			// Normalize speed for visualization (0-1 range)
 			const normalizedSpeed = speedRange > 0 ? (point.Speed - minSpeed) / speedRange : 0;
 
-			// Process lateral acceleration data
 			const lateralAccel = Math.abs(point.LatAccel || 0);
 
 			return {
@@ -173,10 +164,8 @@ const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]) => {
 			};
 		});
 
-		// Smooth the data to remove GPS noise
 		const smoothedData = smoothGPSData(processedData);
 
-		// Detect corners and straights based on GPS data
 		const dataWithSections = detectTrackSections(smoothedData);
 
 		return {
@@ -194,14 +183,13 @@ const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]) => {
 	}
 };
 
-// Calculate distance between two GPS points using Haversine formula
 function calculateGPSDistance(
 	lat1: number,
 	lon1: number,
 	lat2: number,
 	lon2: number,
 ): number {
-	const R = 6371000; // Earth's radius in meters
+	const R = 6371000;
 	const dLat = ((lat2 - lat1) * Math.PI) / 180;
 	const dLon = ((lon2 - lon1) * Math.PI) / 180;
 	const a =
@@ -214,7 +202,6 @@ function calculateGPSDistance(
 	return R * c;
 }
 
-// Calculate bearing between two GPS points
 function calculateBearing(
 	lat1: number,
 	lon1: number,
@@ -231,12 +218,11 @@ function calculateBearing(
 		Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
 
 	const bearing = (Math.atan2(y, x) * 180) / Math.PI;
-	return (bearing + 360) % 360; // Normalize to 0-360
+	return (bearing + 360) % 360;
 }
 
-// Smooth GPS data to reduce noise
 function smoothGPSData(data: any[]): any[] {
-	const windowSize = 5; // Number of points to average
+	const windowSize = 5;
 
 	return data.map((point, index) => {
 		const start = Math.max(0, index - Math.floor(windowSize / 2));
@@ -244,11 +230,9 @@ function smoothGPSData(data: any[]): any[] {
 
 		const window = data.slice(start, end);
 
-		// Smooth latitude and longitude
 		const avgLat = window.reduce((sum, p) => sum + p.Lat, 0) / window.length;
 		const avgLon = window.reduce((sum, p) => sum + p.Lon, 0) / window.length;
 
-		// Smooth speed if available
 		const speeds = window.filter((p) => p.Speed).map((p) => p.Speed);
 		const avgSpeed =
 			speeds.length > 0
@@ -257,38 +241,33 @@ function smoothGPSData(data: any[]): any[] {
 
 		return {
 			...point,
-			Lat: index < 2 || index > data.length - 3 ? point.Lat : avgLat, // Don't smooth start/end points
+			Lat: index < 2 || index > data.length - 3 ? point.Lat : avgLat,
 			Lon: index < 2 || index > data.length - 3 ? point.Lon : avgLon,
 			Speed: avgSpeed,
 		};
 	});
 }
 
-// Detect corners and straights based on GPS data
 function detectTrackSections(data: any[]): any[] {
 	return data.map((point, index) => {
 		let sectionType = "straight";
 		let turnRadius = 0;
 
 		if (index >= 2 && index < data.length - 2) {
-			// Calculate change in heading over a small window
 			const prevHeading = data[index - 2].heading;
 			const nextHeading = data[index + 2].heading;
 
 			let headingChange = Math.abs(nextHeading - prevHeading);
 			if (headingChange > 180) {
-				headingChange = 360 - headingChange; // Handle wraparound
+				headingChange = 360 - headingChange;
 			}
 
-			// Classify based on heading change and speed
 			if (headingChange > 15) {
-				// Significant direction change
 				sectionType = "corner";
 
-				// Estimate turn radius based on speed and heading change
 				const avgSpeed = point.Speed || 0;
 				if (avgSpeed > 0 && headingChange > 0) {
-					const timeWindow = 4; // Assume 4 data points = some time interval
+					const timeWindow = 4;
 					turnRadius =
 						(avgSpeed * timeWindow) / ((headingChange * Math.PI) / 180);
 				}
