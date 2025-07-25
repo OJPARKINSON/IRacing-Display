@@ -68,7 +68,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })" || exit 1
 
 # Add memory optimization flags
-ENV NODE_OPTIONS="--max-old-space-size=512 --optimize-for-size"
+ENV NODE_OPTIONS="--max-old-space-size=512"
 
 # Start the application
 CMD ["node", "server.js"]

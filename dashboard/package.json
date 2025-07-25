@@ -31,6 +31,7 @@
 		"react-dom": "^19.1.0",
 		"react-globe.gl": "^2.33.2",
 		"recharts": "^2.15.3",
+		"svg-pathdata": "^8.0.0",
 		"swr": "^2.3.3",
 		"tailwind-merge": "^3.3.0",
 		"tailwindcss-animate": "^1.0.7",
