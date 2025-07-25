@@ -40,9 +40,11 @@ export default function TelemetryPage({
 	const [selectedMetric, setSelectedMetric] = useState<string>("Speed");
 	const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
 
-	// Extract processed data from the server response
-	const dataWithGPSCoordinates =
-		initialTelemetryData?.dataWithGPSCoordinates || [];
+	// Extract processed data from the server response - wrap in useMemo to fix dependency warning
+	const dataWithGPSCoordinates = useMemo(() => {
+		return initialTelemetryData?.dataWithGPSCoordinates || [];
+	}, [initialTelemetryData?.dataWithGPSCoordinates]);
+
 	const trackBounds = initialTelemetryData?.trackBounds || null;
 	const processError = initialTelemetryData?.processError || null;
 

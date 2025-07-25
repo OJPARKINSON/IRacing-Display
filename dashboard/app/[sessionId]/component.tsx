@@ -209,7 +209,11 @@ const TrackInformation = memo(function TrackInformation({
 });
 
 // Optimized GPS analysis panel with virtualization for large datasets
-const GPSAnalysisPanel = memo(({ data }: { data: any[] }) => {
+const GPSAnalysisPanel = memo(function GPSAnalysisPanel({
+	data,
+}: {
+	data: any[];
+}) {
 	const stats = useMemo(() => {
 		if (!data?.length) return null;
 
@@ -289,7 +293,7 @@ interface TelemetryPageProps {
 	lapId: string;
 }
 
-export default function OptimizedTelemetryPage({
+const OptimizedTelemetryPage = memo(function OptimizedTelemetryPage({
 	sessionId,
 	lapId,
 }: TelemetryPageProps) {
@@ -563,4 +567,6 @@ export default function OptimizedTelemetryPage({
 			)}
 		</div>
 	);
-}
+});
+
+export default OptimizedTelemetryPage;
