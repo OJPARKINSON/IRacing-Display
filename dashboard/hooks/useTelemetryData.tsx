@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, RefObject } from "react";
+import { type RefObject, useEffect, useMemo, useState } from "react";
 import { TelemetryDataPoint } from "@/lib/types";
 
 export function useTelemetryData(
@@ -6,7 +6,7 @@ export function useTelemetryData(
 	trackPath: SVGPathElement | null,
 	startFinishPosition: number,
 	svgContainerRef: RefObject<HTMLDivElement | null>,
-	isClockwise: number = 0,
+	isClockwise = 0,
 ) {
 	const [processError, setProcessError] = useState<string | null>(null);
 
@@ -33,7 +33,7 @@ export function useTelemetryData(
 			const speedRange = maxSpeed - minSpeed;
 
 			return telemetry.map((point, index) => {
-				let adjustedLapPct = (point.LapDistPct / 100) % 1.0;
+				const adjustedLapPct = (point.LapDistPct / 100) % 1.0;
 
 				let pathPosition;
 

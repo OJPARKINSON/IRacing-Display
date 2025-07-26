@@ -1,5 +1,5 @@
+import type VectorSource from "ol/source/Vector";
 import { useRef } from "react";
-import VectorSource from "ol/source/Vector";
 
 export function useMapLayers() {
 	const racingLineSourceRef = useRef<VectorSource | null>(null);

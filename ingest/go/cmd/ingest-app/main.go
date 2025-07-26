@@ -145,10 +145,10 @@ func waitForCompletion(ctx context.Context, pool *worker.WorkerPool, startTime t
 			if lastMetrics.TotalFilesProcessed > 0 {
 				filesDelta := metrics.TotalFilesProcessed - lastMetrics.TotalFilesProcessed
 				recordsDelta := metrics.TotalRecordsProcessed - lastMetrics.TotalRecordsProcessed
-				timeDelta := time.Since(lastCheck).Seconds()
+				timeDelta := time.Since(lastCheck).Milliseconds()
 				if timeDelta > 0 {
-					log.Printf("Processing rate: %.1f files/sec, %.0f records/sec",
-						float64(filesDelta)/timeDelta, float64(recordsDelta)/timeDelta)
+					log.Printf("Processing rate: %.1f files/ms, %.0f records/ms",
+						int64(filesDelta)/timeDelta, int64(recordsDelta)/timeDelta)
 				}
 			}
 

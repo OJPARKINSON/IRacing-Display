@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import Map from "ol/Map";
-import View from "ol/View";
-import VectorLayer from "ol/layer/Vector";
-import VectorSource from "ol/source/Vector";
-import { Style, Stroke, Circle, Fill, Text } from "ol/style";
-import TileLayer from "ol/layer/Tile";
-import XYZ from "ol/source/XYZ";
-import { fromLonLat } from "ol/proj";
 import Feature from "ol/Feature";
 import { LineString, Point } from "ol/geom";
-import { TelemetryDataPoint } from "@/lib/types";
+import TileLayer from "ol/layer/Tile";
+import VectorLayer from "ol/layer/Vector";
+import OlMap from "ol/Map";
+import { fromLonLat } from "ol/proj";
+import VectorSource from "ol/source/Vector";
+import XYZ from "ol/source/XYZ";
+import { Circle, Fill, Stroke, Style, Text } from "ol/style";
+import View from "ol/View";
+import { useEffect, useRef } from "react";
+import type { TelemetryDataPoint } from "@/lib/types";
 
 interface TrackMapProps {
 	dataWithCoordinates: TelemetryDataPoint[];
@@ -27,7 +27,7 @@ export default function GPSTrackMap({
 	isScrubbing,
 }: TrackMapProps) {
 	const mapRef = useRef<HTMLDivElement>(null);
-	const mapInstanceRef = useRef<Map | null>(null);
+	const mapInstanceRef = useRef<OlMap | null>(null);
 
 	const mainLineSourceRef = useRef<VectorSource | null>(null);
 	const speedSegmentsSourceRef = useRef<VectorSource | null>(null);
@@ -37,7 +37,7 @@ export default function GPSTrackMap({
 	useEffect(() => {
 		if (!mapRef.current || mapInstanceRef.current) return;
 
-		console.log('Initializing progressive track map...');
+		console.log("Initializing progressive track map...");
 
 		const mainLineSource = new VectorSource();
 		const speedSegmentsSource = new VectorSource();
@@ -51,9 +51,9 @@ export default function GPSTrackMap({
 
 		const baseLayer = new TileLayer({
 			source: new XYZ({
-				url: '/osm-tiles/{z}/{x}/{y}.png',
-				attributions: '© OpenStreetMap contributors'
-			})
+				url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+				attributions: "© OpenStreetMap contributors",
+			}),
 		});
 
 		const mainLineLayer = new VectorLayer({
@@ -102,7 +102,7 @@ export default function GPSTrackMap({
 			}),
 		});
 
-		const map = new Map({
+		const map = new OlMap({
 			target: mapRef.current,
 			layers: [
 				baseLayer,
@@ -121,7 +121,7 @@ export default function GPSTrackMap({
 
 		mapInstanceRef.current = map;
 
-		console.log('Progressive track map initialized');
+		console.log("Progressive track map initialized");
 
 		return () => {
 			if (mapInstanceRef.current) {
@@ -135,11 +135,14 @@ export default function GPSTrackMap({
 		};
 	}, []);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: <>
 	useEffect(() => {
-		if (!mapInstanceRef.current ||
+		if (
+			!mapInstanceRef.current ||
 			!mainLineSourceRef.current ||
 			!speedSegmentsSourceRef.current ||
-			!carPositionSourceRef.current) {
+			!carPositionSourceRef.current
+		) {
 			return;
 		}
 
@@ -147,7 +150,11 @@ export default function GPSTrackMap({
 			return;
 		}
 
-		console.log('Updating racing line with', dataWithCoordinates.length, 'points');
+		console.log(
+			"Updating racing line with",
+			dataWithCoordinates.length,
+			"points",
+		);
 
 		mainLineSourceRef.current.clear();
 		speedSegmentsSourceRef.current.clear();
@@ -163,13 +170,7 @@ export default function GPSTrackMap({
 				return;
 			}
 
-			console.log('Valid GPS points:', validGPSPoints.length);
-
-			console.log('Sample speed values:', validGPSPoints.slice(0, 5).map(p => ({
-				index: p,
-				speed: p.Speed,
-				type: typeof p.Speed
-			})));
+			console.log("Valid GPS points:", validGPSPoints.length);
 
 			const lineCoordinates = validGPSPoints.map((point) =>
 				fromLonLat([point.Lon, point.Lat]),
@@ -186,7 +187,7 @@ export default function GPSTrackMap({
 				const point = validGPSPoints[i];
 				const nextPoint = validGPSPoints[i + 1];
 
-				if (typeof point.Speed !== 'number' || isNaN(point.Speed)) {
+				if (typeof point.Speed !== "number" || isNaN(point.Speed)) {
 					console.warn(`Invalid speed at point ${i}:`, point.Speed);
 					continue;
 				}
@@ -235,7 +236,7 @@ export default function GPSTrackMap({
 				}
 			}
 
-			console.log('Racing line updated successfully');
+			console.log("Racing line updated successfully");
 		} catch (error) {
 			console.error("Error updating racing line:", error);
 		}
@@ -317,20 +318,26 @@ export default function GPSTrackMap({
 	const handleZoomIn = (): void => {
 		if (mapInstanceRef.current) {
 			const view = mapInstanceRef.current.getView();
-			view.animate({
-				zoom: view.getZoom()! + 0.5,
-				duration: 250,
-			});
+			const currentZoom = view.getZoom();
+			if (currentZoom && currentZoom < 20) {
+				view.animate({
+					zoom: currentZoom + 0.5,
+					duration: 250,
+				});
+			}
 		}
 	};
 
 	const handleZoomOut = (): void => {
 		if (mapInstanceRef.current) {
 			const view = mapInstanceRef.current.getView();
-			view.animate({
-				zoom: view.getZoom()! - 0.5,
-				duration: 250,
-			});
+			const currentZoom = view.getZoom();
+			if (currentZoom && currentZoom > 5) {
+				view.animate({
+					zoom: currentZoom - 0.5,
+					duration: 250,
+				});
+			}
 		}
 	};
 
@@ -338,6 +345,7 @@ export default function GPSTrackMap({
 		<div className="h-[500px] bg-gray-800 rounded-lg relative">
 			<div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
 				<button
+					type="button"
 					onClick={handleZoomIn}
 					className="bg-gray-700 hover:bg-gray-600 text-white w-8 h-8 flex items-center justify-center rounded shadow"
 					aria-label="Zoom in"
@@ -345,6 +353,7 @@ export default function GPSTrackMap({
 					+
 				</button>
 				<button
+					type="button"
 					onClick={handleZoomOut}
 					className="bg-gray-700 hover:bg-gray-600 text-white w-8 h-8 flex items-center justify-center rounded shadow"
 					aria-label="Zoom out"
@@ -370,17 +379,22 @@ export default function GPSTrackMap({
 
 			<div className="absolute bottom-2 left-2 z-10 bg-gray-700 bg-opacity-90 p-2 rounded text-white text-xs">
 				<div>GPS Points: {dataWithCoordinates.length}</div>
-				<div>Map: {mapInstanceRef.current ? 'Initialized' : 'Not ready'}</div>
-				<div>Main Line: {mainLineSourceRef.current?.getFeatures().length || 0}</div>
-				<div>Speed Segments: {speedSegmentsSourceRef.current?.getFeatures().length || 0}</div>
+				<div>Map: {mapInstanceRef.current ? "Initialized" : "Not ready"}</div>
+				<div>
+					Main Line: {mainLineSourceRef.current?.getFeatures().length || 0}
+				</div>
+				<div>
+					Speed Segments:{" "}
+					{speedSegmentsSourceRef.current?.getFeatures().length || 0}
+				</div>
 			</div>
 
 			<div
 				ref={mapRef}
 				className="w-full h-full"
 				style={{
-					width: '100%',
-					height: '100%',
+					width: "100%",
+					height: "100%",
 				}}
 			/>
 		</div>

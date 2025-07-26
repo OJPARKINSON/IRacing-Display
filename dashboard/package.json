@@ -6,7 +6,12 @@
 		"dev": "next dev",
 		"build": "next build",
 		"start": "next start",
-		"lint": "next lint"
+		"lint": "next lint",
+		"analyze": "cross-env ANALYZE=true next build",
+		"build:profile": "next build --profile",
+		"build:debug": "next build --debug",
+		"lighthouse": "lhci autorun",
+		"perf": "npm run build && npm run start"
 	},
 	"dependencies": {
 		"@influxdata/influxdb-client": "^1.35.0",
@@ -14,6 +19,7 @@
 		"@influxdata/influxdb3-client": "^1.1.0",
 		"@questdb/nodejs-client": "^3.0.0",
 		"@tailwindcss/postcss": "^4.1.7",
+		"autoprefixer": "^10.4.21",
 		"clsx": "^2.1.1",
 		"d3": "^7.9.0",
 		"globe.gl": "^2.41.6",
@@ -25,7 +31,6 @@
 		"react-dom": "^19.1.0",
 		"react-globe.gl": "^2.33.2",
 		"recharts": "^2.15.3",
-		"svg-pathdata": "^7.2.0",
 		"swr": "^2.3.3",
 		"tailwind-merge": "^3.3.0",
 		"tailwindcss-animate": "^1.0.7",
@@ -33,16 +38,39 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.0.0",
+		"@lhci/cli": "^0.15.1",
+		"@next/bundle-analyzer": "^15.3.2",
 		"@types/d3": "^7.4.3",
 		"@types/node": "^22",
 		"@types/pg": "^8.15.4",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
 		"@types/three": "^0.177.0",
+		"cross-env": "^7.0.3",
+		"cssnano": "^6.0.1",
 		"eslint": "^9",
 		"eslint-config-next": "15.3.2",
 		"postcss": "^8.5.3",
+		"postcss-combine-duplicated-selectors": "^10.0.3",
+		"postcss-merge-rules": "^6.0.1",
 		"tailwindcss": "^4.1.7",
-		"typescript": "^5"
+		"typescript": "^5",
+		"webpack-bundle-analyzer": "^4.10.1"
+	},
+	"engines": {
+		"node": ">=18.0.0",
+		"npm": ">=9.0.0"
+	},
+	"browserslist": {
+		"production": [
+			">0.3%",
+			"not dead",
+			"not op_mini all"
+		],
+		"development": [
+			"last 1 chrome version",
+			"last 1 firefox version",
+			"last 1 safari version"
+		]
 	}
 }

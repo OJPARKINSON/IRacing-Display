@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, RefObject } from "react";
-import { TelemetryDataPoint } from "@/lib/types";
+import { RefObject, useEffect, useMemo, useState } from "react";
+import type { TelemetryDataPoint } from "@/lib/types";
 
 export function useGPSTelemetryData(
 	telemetry: any[] | undefined,
@@ -124,9 +124,9 @@ function calculateGPSDistance(
 	const a =
 		Math.sin(dLat / 2) * Math.sin(dLat / 2) +
 		Math.cos((lat1 * Math.PI) / 180) *
-		Math.cos((lat2 * Math.PI) / 180) *
-		Math.sin(dLon / 2) *
-		Math.sin(dLon / 2);
+			Math.cos((lat2 * Math.PI) / 180) *
+			Math.sin(dLon / 2) *
+			Math.sin(dLon / 2);
 	const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 	return R * c;
 }
@@ -264,7 +264,7 @@ export async function fetchTrackBoundaries(
 
 export function createApproximateTrackBoundaries(
 	telemetryData: TelemetryDataPoint[],
-	trackWidth: number = 15, // meters
+	trackWidth = 15, // meters
 ): { outer: [number, number][]; inner: [number, number][] } {
 	const outer: [number, number][] = [];
 	const inner: [number, number][] = [];
@@ -315,7 +315,7 @@ function calculateDestinationPoint(
 
 	const newLatRad = Math.asin(
 		Math.sin(latRad) * Math.cos(distance / R) +
-		Math.cos(latRad) * Math.sin(distance / R) * Math.cos(bearingRad),
+			Math.cos(latRad) * Math.sin(distance / R) * Math.cos(bearingRad),
 	);
 
 	const newLonRad =

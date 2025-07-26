@@ -9,7 +9,10 @@
 		"ignoreUnknown": false,
 		"includes": [
 			"**",
-			"!**.next"
+			"!**/.next/**",
+			"!**/node_modules/**",
+			"!**/dist/**",
+			"!**/build/**"
 		]
 	},
 	"formatter": {
@@ -19,7 +22,24 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true
+			"recommended": true,
+			"correctness": {
+				"noUnusedVariables": "error",
+				"noUnusedImports": "error"
+			},
+			"nursery": "off",
+			"style": {
+				"noParameterAssign": "error",
+				"useAsConstAssertion": "error",
+				"useDefaultParameterLast": "error",
+				"useEnumInitializers": "error",
+				"useSelfClosingElements": "error",
+				"useSingleVarDeclarator": "error",
+				"noUnusedTemplateLiteral": "error",
+				"useNumberNamespace": "error",
+				"noInferrableTypes": "error",
+				"noUselessElse": "error"
+			}
 		}
 	},
 	"javascript": {

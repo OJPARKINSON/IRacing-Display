@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function useSvgTrack() {
 	const [trackPath, setTrackPath] = useState<SVGPathElement | null>(null);
@@ -37,10 +37,10 @@ export function useSvgTrack() {
 
 					if (startFinishLine) {
 						// Get coordinates from the start/finish line
-						const startX = parseFloat(
+						const startX = Number.parseFloat(
 							startFinishLine.getAttribute("x1") || "0",
 						);
-						const startY = parseFloat(
+						const startY = Number.parseFloat(
 							startFinishLine.getAttribute("y1") || "0",
 						);
 
@@ -54,7 +54,7 @@ export function useSvgTrack() {
 						for (let i = 0; i < pathLength; i += step) {
 							const point = pathElement.getPointAtLength(i);
 							const distance = Math.sqrt(
-								Math.pow(point.x - startX, 2) + Math.pow(point.y - startY, 2),
+								(point.x - startX) ** 2 + (point.y - startY) ** 2,
 							);
 
 							if (distance < minDistance) {
@@ -73,7 +73,7 @@ export function useSvgTrack() {
 						for (let i = minSearch; i <= maxSearch; i += step) {
 							const point = pathElement.getPointAtLength(i);
 							const distance = Math.sqrt(
-								Math.pow(point.x - startX, 2) + Math.pow(point.y - startY, 2),
+								(point.x - startX) ** 2 + (point.y - startY) ** 2,
 							);
 
 							if (distance < minDistance) {

@@ -219,8 +219,10 @@ func (wp *WorkerPool) logFinalMetrics() {
 	}
 
 	if duration.Seconds() > 0 {
-		filesPerSec := float64(wp.metrics.TotalFilesProcessed) / duration.Seconds()
-		recordsPerSec := float64(wp.metrics.TotalRecordsProcessed) / duration.Seconds()
-		log.Printf("Throughput: %.2f files/sec, %.0f records/sec", filesPerSec, recordsPerSec)
+		filesPerSec := int64(wp.metrics.TotalFilesProcessed) / duration.Milliseconds()
+		recordsPerSec := int64(wp.metrics.TotalRecordsProcessed) / duration.Milliseconds()
+		log.Println("filesPerSec: ", duration.Milliseconds())
+		log.Println("recordsPerSec: ", duration.Milliseconds())
+		log.Printf("Throughput: %d files/ms, %d records/ms", filesPerSec, recordsPerSec)
 	}
 }

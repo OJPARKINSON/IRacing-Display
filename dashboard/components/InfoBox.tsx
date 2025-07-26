@@ -1,15 +1,15 @@
-import { TelemetryDataPoint } from "@/lib/types";
-import { useMemo, useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import {
-	ResponsiveContainer,
+	CartesianGrid,
+	Line,
 	LineChart,
+	ReferenceDot,
+	ResponsiveContainer,
+	Tooltip,
 	XAxis,
 	YAxis,
-	Tooltip,
-	Line,
-	CartesianGrid,
-	ReferenceDot,
 } from "recharts";
+import type { TelemetryDataPoint } from "@/lib/types";
 
 interface InfoBoxProps {
 	telemetryData: any[];
@@ -91,28 +91,16 @@ export const TelemetryChart = ({
 		return 0;
 	};
 
-	const lowSpeedPoints = useMemo(() => {
-		if (!chartData.length) return [];
-
-		const maxSpeed = Math.max(...chartData.map((p) => p.Speed));
-		const threshold = maxSpeed * 0.4;
-
-		return chartData
-			.filter((point) => point.Speed < threshold)
-			.map((point) => ({
-				x: point.sessionTime,
-				y: getDataValue(point, selectedMetric),
-				index: point.index,
-			}));
-	}, [chartData, selectedMetric]);
-
 	return (
 		<div className="bg-gray-800 p-4 rounded-lg">
 			<div className="flex justify-between items-center mb-4">
 				<h2 className="text-xl font-semibold">Telemetry Data</h2>
 				<div>
-					<label className="text-sm mr-2">Select Metric:</label>
+					<label htmlFor="selectMetric" className="text-sm mr-2">
+						Select Metric:
+					</label>
 					<select
+						name="selectMetric"
 						value={selectedMetric}
 						onChange={(e) => setSelectedMetric(e.target.value)}
 						className="bg-gray-700 text-white p-1 rounded"
