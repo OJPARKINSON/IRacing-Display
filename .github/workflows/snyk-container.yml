@@ -54,20 +54,6 @@ jobs:
           BUILDPLATFORM=linux/amd64
           TARGETPLATFORM=linux/arm64
     
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      continue-on-error: true
-      with:
-        image-ref: ghcr.io/${{ github.repository_owner }}/iracing-display:latest
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-    
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: 'trivy-results.sarif'
-
   telemetryService:
     runs-on: ubuntu-24.04-arm
     steps:
@@ -105,16 +91,3 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      continue-on-error: true
-      with:
-        image-ref: ghcr.io/${{ github.repository_owner }}/iracing-telemetryservice:latest
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-    
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: 'trivy-results.sarif'
