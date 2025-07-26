@@ -1,10 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
 	output: process.env.NODE_ENV === "production" ? "standalone" : undefined,
-	serverExternalPackages: ["@influxdata/influxdb-client"],
+	serverExternalPackages: ["pg"],
 	reactStrictMode: true,
 
-	// Compiler optimizations
+	// Experimental features that may cause issues on ARM
+	experimental: {
+		// Disable features that might cause issues on RPi
+		esmExternals: false,
+	},
+
+	// Compiler optimizations - be more conservative for ARM
 	compiler: {
 		removeConsole:
 			process.env.NODE_ENV === "production"
@@ -22,16 +28,31 @@ const nextConfig = {
 		contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
 	},
 
-	// Bundle optimization
+	// Bundle optimization - more conservative for ARM
 	webpack: (config, { dev, isServer }) => {
-		// Production optimizations
+		// Fix for ARM/RPi deployment issues
+		config.resolve.fallback = {
+			...config.resolve.fallback,
+			fs: false,
+			net: false,
+			tls: false,
+			crypto: false,
+		};
+
+		// Ensure proper module resolution for ARM
+		config.resolve.alias = {
+			...config.resolve.alias,
+			// Force specific versions to prevent conflicts
+		};
+
+		// Production optimizations - more conservative
 		if (!dev) {
 			config.optimization = {
 				...config.optimization,
 				splitChunks: {
 					chunks: "all",
 					minSize: 20000,
-					maxSize: 244000,
+					maxSize: 200000, // Smaller chunks for ARM
 					cacheGroups: {
 						default: {
 							minChunks: 2,
@@ -43,36 +64,22 @@ const nextConfig = {
 							name: "vendors",
 							priority: 10,
 							reuseExistingChunk: true,
+							chunks: "all",
 						},
-						openlayers: {
-							test: /[\\/]node_modules[\\/]ol[\\/]/,
-							name: "openlayers",
-							priority: 20,
-							reuseExistingChunk: true,
-						},
-						recharts: {
-							test: /[\\/]node_modules[\\/]recharts[\\/]/,
-							name: "recharts",
-							priority: 20,
-							reuseExistingChunk: true,
-						},
-						three: {
-							test: /[\\/]node_modules[\\/]three[\\/]/,
-							name: "three",
-							priority: 20,
-							reuseExistingChunk: true,
-						},
-						utils: {
-							name: "utils",
-							test: /[\\/](lib|hooks|components)[\\/]/,
-							priority: 15,
-							reuseExistingChunk: true,
+						// More conservative chunking for ARM
+						frameworks: {
+							test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
+							name: "frameworks",
+							priority: 40,
+							chunks: "all",
+							enforce: true,
 						},
 					},
 				},
-				// Tree shaking optimizations
+				// More conservative optimization for ARM
 				usedExports: true,
 				sideEffects: false,
+				minimize: true,
 			};
 		}
 
@@ -85,27 +92,11 @@ const nextConfig = {
 			};
 		}
 
-		// Bundle analyzer
-		if (process.env.ANALYZE === "true") {
-			const { BundleAnalyzerPlugin } = require("webpack-bundle-analyzer");
-			config.plugins.push(
-				new BundleAnalyzerPlugin({
-					analyzerMode: "server",
-					analyzerPort: isServer ? 8888 : 8889,
-					openAnalyzer: true,
-					generateStatsFile: true,
-					statsFilename: isServer
-						? "../analyze/server.json"
-						: "../analyze/client.json",
-				}),
-			);
-		}
-
-		// Optimize resolve for better tree shaking
-		config.resolve.alias = {
-			...config.resolve.alias,
-			// Remove problematic recharts ESM alias
-		};
+		// Ensure compatibility with ARM architecture
+		config.module.rules.push({
+			test: /\.node$/,
+			use: "node-loader",
+		});
 
 		return config;
 	},
