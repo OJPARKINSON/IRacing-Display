@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { TelemetryDataPoint } from "@/lib/types";
+import { useCallback, useState } from "react";
+import type { TelemetryDataPoint } from "@/lib/types";
 
 /**
  * Custom hook to manage track position synchronization with chart

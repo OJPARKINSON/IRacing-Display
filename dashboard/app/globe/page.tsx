@@ -1,16 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
 import {
-	Target,
 	Activity,
-	MapPin,
 	Clock,
 	Gauge,
+	type LucideIcon,
+	MapPin,
 	Navigation,
-	LucideIcon,
+	Target,
 } from "lucide-react";
 import dynamic from "next/dynamic";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 
 const Globe = dynamic(() => import("react-globe.gl"), {
 	ssr: false,
@@ -155,6 +156,7 @@ const TrackPopup: React.FC<TrackPopupProps> = ({ track, onClose }) => {
 					</p>
 				</div>
 				<button
+					type="button"
 					onClick={onClose}
 					className="text-gray-400 hover:text-white transition-colors text-xl"
 					aria-label="Close popup"
@@ -189,7 +191,10 @@ const TrackPopup: React.FC<TrackPopupProps> = ({ track, onClose }) => {
 				</div>
 			</div>
 
-			<button className="w-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500 text-amber-400 py-2 px-4 rounded font-mono text-sm transition-colors">
+			<button
+				type="button"
+				className="w-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500 text-amber-400 py-2 px-4 rounded font-mono text-sm transition-colors"
+			>
 				VIEW TELEMETRY
 			</button>
 		</div>
@@ -372,7 +377,7 @@ const SpyDashboardGlobe: React.FC = () => {
 							</div>
 						</div>
 						<div className="flex gap-1">
-							<div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+							<div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
 							<span className="text-xs text-green-400 font-mono">ONLINE</span>
 						</div>
 					</div>
@@ -418,19 +423,19 @@ const SpyDashboardGlobe: React.FC = () => {
 					</h3>
 					<div className="space-y-2 text-xs font-mono">
 						<div className="flex items-center gap-2">
-							<div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+							<div className="w-3 h-3 bg-amber-500 rounded-full" />
 							<span>Road Course</span>
 						</div>
 						<div className="flex items-center gap-2">
-							<div className="w-3 h-3 bg-red-500 rounded-full"></div>
+							<div className="w-3 h-3 bg-red-500 rounded-full" />
 							<span>Oval/Speedway</span>
 						</div>
 						<div className="flex items-center gap-2">
-							<div className="w-3 h-3 bg-purple-400 rounded-full"></div>
+							<div className="w-3 h-3 bg-purple-400 rounded-full" />
 							<span>Dirt Track</span>
 						</div>
 						<div className="flex items-center gap-2">
-							<div className="w-3 h-3 bg-green-500 rounded-full"></div>
+							<div className="w-3 h-3 bg-green-500 rounded-full" />
 							<span>Street Circuit</span>
 						</div>
 					</div>
@@ -442,11 +447,13 @@ const SpyDashboardGlobe: React.FC = () => {
 					</h3>
 					<div className="space-y-2">
 						<button
+							type="button"
 							onClick={toggleAutoRotation}
-							className={`w-full px-3 py-1 rounded text-xs font-mono border transition-colors ${isAutoRotating
-								? "bg-amber-500/20 border-amber-500 text-amber-400"
-								: "bg-gray-700/50 border-gray-600 text-gray-400"
-								}`}
+							className={`w-full px-3 py-1 rounded text-xs font-mono border transition-colors ${
+								isAutoRotating
+									? "bg-amber-500/20 border-amber-500 text-amber-400"
+									: "bg-gray-700/50 border-gray-600 text-gray-400"
+							}`}
 						>
 							{isAutoRotating ? "DISABLE AUTO-ROTATE" : "ENABLE AUTO-ROTATE"}
 						</button>
@@ -498,7 +505,7 @@ const SpyDashboardGlobe: React.FC = () => {
 			)}
 
 			<div className="absolute inset-0 pointer-events-none z-30">
-				<div className="absolute inset-0 bg-gradient-to-b from-transparent via-amber-500/5 to-transparent animate-pulse"></div>
+				<div className="absolute inset-0 bg-gradient-to-b from-transparent via-amber-500/5 to-transparent animate-pulse" />
 			</div>
 
 			<div
@@ -510,7 +517,7 @@ const SpyDashboardGlobe: React.FC = () => {
                     `,
 					backgroundSize: "50px 50px",
 				}}
-			></div>
+			/>
 		</div>
 	);
 };

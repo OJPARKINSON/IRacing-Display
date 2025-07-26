@@ -1,6 +1,5 @@
-import { QueryResult } from "pg";
-import { TelemetryDataPoint, TelemetryResponse } from "./types";
-
+import type { QueryResult } from "pg";
+import type { TelemetryDataPoint } from "./types";
 
 export const processIRacingDataWithGPS = ({ rows }: QueryResult<any>) => {
 	const sortedData = [...rows].sort((a, b) => {
@@ -56,19 +55,21 @@ export const processIRacingDataWithGPS = ({ rows }: QueryResult<any>) => {
 };
 
 interface TrackBounds {
-	minLat: number,
-	maxLat: number,
-	minLon: number,
-	maxLon: number
+	minLat: number;
+	maxLat: number;
+	minLon: number;
+	maxLon: number;
 }
 
 export interface TelemetryRes {
-	dataWithGPSCoordinates: null | any[],
-	trackBounds: TrackBounds | null,
-	processError: string | null,
+	dataWithGPSCoordinates: null | any[];
+	trackBounds: TrackBounds | null;
+	processError: string | null;
 }
 
-const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]): TelemetryRes => {
+const processGPSTelemetryData = (
+	telemetry: TelemetryDataPoint[],
+): TelemetryRes => {
 	if (!telemetry?.length) {
 		return {
 			dataWithGPSCoordinates: [],
@@ -106,7 +107,7 @@ const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]): TelemetryRes 
 			maxLon: Math.max(...lons),
 		};
 
-		const speeds = validGPSData.map(p => p.Speed).filter(s => s > 0);
+		const speeds = validGPSData.map((p) => p.Speed).filter((s) => s > 0);
 		const minSpeed = Math.min(...speeds);
 		const maxSpeed = Math.max(...speeds);
 		const speedRange = maxSpeed - minSpeed;
@@ -148,7 +149,8 @@ const processGPSTelemetryData = (telemetry: TelemetryDataPoint[]): TelemetryRes 
 				);
 			}
 
-			const normalizedSpeed = speedRange > 0 ? (point.Speed - minSpeed) / speedRange : 0;
+			const normalizedSpeed =
+				speedRange > 0 ? (point.Speed - minSpeed) / speedRange : 0;
 
 			const lateralAccel = Math.abs(point.LatAccel || 0);
 
@@ -195,9 +197,9 @@ function calculateGPSDistance(
 	const a =
 		Math.sin(dLat / 2) * Math.sin(dLat / 2) +
 		Math.cos((lat1 * Math.PI) / 180) *
-		Math.cos((lat2 * Math.PI) / 180) *
-		Math.sin(dLon / 2) *
-		Math.sin(dLon / 2);
+			Math.cos((lat2 * Math.PI) / 180) *
+			Math.sin(dLon / 2) *
+			Math.sin(dLon / 2);
 	const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 	return R * c;
 }
@@ -283,3 +285,39 @@ function detectTrackSections(data: any[]): any[] {
 		};
 	});
 }
+
+export const fetcher = async (url: string): Promise<any> => {
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+	try {
+		const response = await fetch(url, {
+			signal: controller.signal,
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+			},
+		});
+
+		clearTimeout(timeoutId);
+
+		if (!response.ok) {
+			throw new Error(
+				`HTTP error! status: ${response.status} - ${response.statusText}`,
+			);
+		}
+
+		return await response.json();
+	} catch (error) {
+		clearTimeout(timeoutId);
+
+		if (error instanceof Error) {
+			if (error.name === "AbortError") {
+				throw new Error("Request timeout - please try again");
+			}
+			throw error;
+		}
+
+		throw new Error("An unexpected error occurred");
+	}
+};

@@ -1,8 +1,8 @@
 // TrackService.ts - Dynamic approach following track shape
 import Feature from "ol/Feature";
 import { LineString, Point } from "ol/geom";
-import VectorSource from "ol/source/Vector";
 import { transform } from "ol/proj";
+import type VectorSource from "ol/source/Vector";
 
 /**
  * Creates a racing line feature based on telemetry data
@@ -209,7 +209,7 @@ function projectToTrackCoordinates(
 }
 
 // Helper functions for backwards compatibility
-export function getTrackPoints(numPoints: number = 100): number[][] {
+export function getTrackPoints(numPoints = 100): number[][] {
 	const trackWidth = 1556;
 	const trackHeight = 783;
 
@@ -224,7 +224,7 @@ export function getTrackPoints(numPoints: number = 100): number[][] {
 
 export function mapLapDistanceToTrackPoint(
 	lapDistPct: number,
-	numPoints: number = 100,
+	numPoints = 100,
 ): number[] {
 	const trackWidth = 1556;
 	const trackHeight = 783;

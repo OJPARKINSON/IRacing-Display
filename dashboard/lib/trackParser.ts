@@ -9,7 +9,7 @@ import { SVGPathData } from "svg-pathdata";
  */
 export function parseSvgPath(
 	svgPath: string,
-	numPoints: number = 200,
+	numPoints = 200,
 ): [number, number][] {
 	try {
 		// Parse the SVG path
@@ -63,9 +63,7 @@ function getApproximatePathLength(pathData: any): number {
 				break;
 
 			case SVGPathData.LINE_TO:
-				length += Math.sqrt(
-					Math.pow(cmd.x - prevX, 2) + Math.pow(cmd.y - prevY, 2),
-				);
+				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
 				prevX = cmd.x;
 				prevY = cmd.y;
 				break;
@@ -81,9 +79,7 @@ function getApproximatePathLength(pathData: any): number {
 				break;
 
 			case SVGPathData.CLOSE_PATH:
-				length += Math.sqrt(
-					Math.pow(firstX - prevX, 2) + Math.pow(firstY - prevY, 2),
-				);
+				length += Math.sqrt((firstX - prevX) ** 2 + (firstY - prevY) ** 2);
 				prevX = firstX;
 				prevY = firstY;
 				break;
@@ -92,42 +88,32 @@ function getApproximatePathLength(pathData: any): number {
 			// A proper implementation would use curve length formulas
 			case SVGPathData.CURVE_TO:
 				// Approximate with a line to the end point
-				length += Math.sqrt(
-					Math.pow(cmd.x - prevX, 2) + Math.pow(cmd.y - prevY, 2),
-				);
+				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
 				prevX = cmd.x;
 				prevY = cmd.y;
 				break;
 
 			case SVGPathData.SMOOTH_CURVE_TO:
-				length += Math.sqrt(
-					Math.pow(cmd.x - prevX, 2) + Math.pow(cmd.y - prevY, 2),
-				);
+				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
 				prevX = cmd.x;
 				prevY = cmd.y;
 				break;
 
 			case SVGPathData.QUAD_TO:
-				length += Math.sqrt(
-					Math.pow(cmd.x - prevX, 2) + Math.pow(cmd.y - prevY, 2),
-				);
+				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
 				prevX = cmd.x;
 				prevY = cmd.y;
 				break;
 
 			case SVGPathData.SMOOTH_QUAD_TO:
-				length += Math.sqrt(
-					Math.pow(cmd.x - prevX, 2) + Math.pow(cmd.y - prevY, 2),
-				);
+				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
 				prevX = cmd.x;
 				prevY = cmd.y;
 				break;
 
 			// Arc approximation
 			case SVGPathData.ARC:
-				length += Math.sqrt(
-					Math.pow(cmd.x - prevX, 2) + Math.pow(cmd.y - prevY, 2),
-				);
+				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
 				prevX = cmd.x;
 				prevY = cmd.y;
 				break;
@@ -169,7 +155,7 @@ function getPointAtLength(
 
 			case SVGPathData.LINE_TO: {
 				const segmentLength = Math.sqrt(
-					Math.pow(cmd.x - prevX, 2) + Math.pow(cmd.y - prevY, 2),
+					(cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2,
 				);
 
 				if (currentLength + segmentLength >= targetLength) {
@@ -193,7 +179,7 @@ function getPointAtLength(
 			case SVGPathData.CURVE_TO: {
 				// Simplification - treating curves as lines to end point
 				const segmentLength = Math.sqrt(
-					Math.pow(cmd.x - prevX, 2) + Math.pow(cmd.y - prevY, 2),
+					(cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2,
 				);
 
 				if (currentLength + segmentLength >= targetLength) {

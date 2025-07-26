@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { TelemetryDataPoint } from "@/lib/types";
+import type { TelemetryDataPoint } from "@/lib/types";
 
 export function useLapPosition(
 	telemetryData: TelemetryDataPoint[],

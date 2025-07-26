@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { TelemetryDataPoint } from "@/lib/types";
+import type { TelemetryDataPoint } from "@/lib/types";
 
 /**
  * Hook to synchronize chart selection with track position

@@ -85,10 +85,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      INFLUXDB_URL: ${INFLUXDB_URL}
-      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
-      INFLUXDB_ORG: myorg
-      INFLUXDB_BUCKET: telemetry
+      QUESTDB_HOST: questdb
+      QUESTDB_PORT: 8812
+      QUESTDB_USER: admin
+      QUESTDB_PASSWORD: quest
+      QUESTDB_DATABASE: qdb
       NODE_ENV: production
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     networks:
@@ -96,7 +97,7 @@ services:
 
   questdb:
     image: questdb/questdb:latest
-    container_name: questdb_quickstart
+    container_name: questdb
     restart: unless-stopped
     ports:
       - "9000:9000"
@@ -108,7 +109,7 @@ services:
     networks:
       - telemetry-network
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/status" ]
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/8812' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
