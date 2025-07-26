@@ -34,11 +34,14 @@ func (wp *WorkerPool) startWorker(workerID int) {
 func (wp *WorkerPool) processWorkItem(ctx context.Context, workerID int, item WorkItem) {
 	startTime := time.Now()
 
+	filename := item.FileInfo.Name()
+	wp.UpdateWorkerStatus(workerID, filename, "PROCESSING")
+
 	log.Printf("Worker %d processing file: %s (retry %d)", workerID, item.FilePath, item.RetryCount)
 
-	// Pass the connection pool to the file processor
 	processor, err := processing.NewFileProcessor(wp.config, workerID, wp.rabbitPool)
 	if err != nil {
+		wp.UpdateWorkerStatus(workerID, filename, "ERROR")
 		wp.errorsChan <- WorkError{
 			FilePath:  item.FilePath,
 			Error:     err,
@@ -52,6 +55,7 @@ func (wp *WorkerPool) processWorkItem(ctx context.Context, workerID int, item Wo
 
 	result, err := processor.ProcessFile(ctx, item.FilePath, item.FileInfo)
 	if err != nil {
+		wp.UpdateWorkerStatus(workerID, filename, "ERROR")
 		wp.errorsChan <- WorkError{
 			FilePath:  item.FilePath,
 			Error:     err,

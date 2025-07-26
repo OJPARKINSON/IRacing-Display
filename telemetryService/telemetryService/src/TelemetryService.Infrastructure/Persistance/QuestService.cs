@@ -41,7 +41,7 @@ public class QuestDbService
 
         foreach (var tel in telData)
         {
-            await _sender.Table("TelemetryTicks")
+            _sender.Table("TelemetryTicks")
                 .Symbol("lap_id", tel.Lap_id ?? "unknown")
                 .Symbol("session_id", tel.Session_id)
                 .Symbol("track_name", tel.Track_name)
@@ -84,7 +84,7 @@ public class QuestDbService
                 .Column("rFtempM", tel.RFtempM)
                 .Column("lRtempM", tel.LRtempM)
                 .Column("rRtempM", tel.RRtempM)
-                .AtAsync(DateTime.Parse(tel.Tick_time));
+                .At(DateTime.Parse(tel.Tick_time));
 
         }
         try

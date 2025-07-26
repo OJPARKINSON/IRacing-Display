@@ -67,6 +67,7 @@ public class Subscriber
         Console.WriteLine("Successfully connected to RabbitMQ!");
 
         using var channel = await connection.CreateChannelAsync();
+        await channel.BasicQosAsync(0, 1000, false);
         Console.WriteLine("Channel created successfully");
 
         await channel.ExchangeDeclareAsync(
@@ -94,24 +95,22 @@ public class Subscriber
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += async (_, ea) =>
         {
+            try
             {
-                try
-                {
-                    var body = ea.Body.ToArray();
-                    var message = Encoding.UTF8.GetString(body);
+                var body = ea.Body.ToArray();
+                var message = Encoding.UTF8.GetString(body);
 
-                    List<TelemetryData> telemetryData = _telemetryService.Parse(message);
+                List<TelemetryData> telemetryData = _telemetryService.Parse(message);
 
-                    await _influxService.WriteTicks(telemetryData);
-                    await _questDbService.WriteTick(telemetryData);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error processing message: {ex.Message}");
-                    Console.WriteLine($"Exception details: {ex}");
-                }
+                var influxTask = _influxService.WriteTicks(telemetryData);
+                var questTask = _questDbService.WriteTick(telemetryData);
+                
+                await Task.WhenAll(influxTask, questTask);
             }
-            ;
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error processing message: {ex.Message}");
+            }
         };
 
         await channel.BasicConsumeAsync(

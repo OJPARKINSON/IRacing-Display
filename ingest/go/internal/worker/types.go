@@ -30,11 +30,16 @@ type WorkError struct {
 }
 
 type WorkerMetrics struct {
-	WorkerID       int
-	FilesPRocessed int
-	TotalRecords   int
-	TotalBatches   int
-	ProcessingTime time.Duration
-	LastActivity   time.Time
-	ErrorCount     int
+	WorkerID         int
+	FilesProcessed   int
+	TotalRecords     int64
+	TotalBatches     int64
+	ProcessingTime   time.Duration
+	LastActivity     time.Time
+	ErrorCount       int
+	CurrentFile      string
+	Status           string
+	ProcessingRate   float64
+	AvgTimePerFile   time.Duration
+	TotalFileTime    time.Duration
 }

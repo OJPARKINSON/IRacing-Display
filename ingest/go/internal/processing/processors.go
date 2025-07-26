@@ -8,7 +8,7 @@ import (
 
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/config"
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/messaging"
-	"github.com/teamjorge/ibt"
+	"github.com/OJPARKINSON/ibt"
 	"github.com/teamjorge/ibt/headers"
 )
 
@@ -26,6 +26,12 @@ type loaderProcessor struct {
 	batchBuffer    []map[string]interface{}
 	bufferPool     *sync.Pool
 	config         *config.Config
+
+	// Pre-allocated session info to avoid per-tick lookups
+	sessionID      int
+	trackName      string
+	trackID        int
+	sessionInfoSet bool
 }
 
 type processorMetrics struct {
@@ -34,7 +40,6 @@ type processorMetrics struct {
 	processingTime    time.Duration
 	maxBatchSize      int
 	processingStarted time.Time
-	mu                sync.Mutex
 }
 
 func NewLoaderProcessor(pubSub *messaging.PubSub, groupNumber int, config *config.Config, workerID int) *loaderProcessor {
@@ -53,25 +58,23 @@ func NewLoaderProcessor(pubSub *messaging.PubSub, groupNumber int, config *confi
 		batchBuffer: make([]map[string]interface{}, 0, 1000),
 		bufferPool: &sync.Pool{
 			New: func() interface{} {
-				return make(map[string]interface{}, 50)
+				return make(map[string]interface{}, 64)
 			},
 		},
 	}
-
-	lp.flushTimer = time.AfterFunc(config.BatchTimeout, lp.flushTimerCallback)
 
 	return lp
 }
 
 func (l *loaderProcessor) flushTimerCallback() {
 	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if len(l.cache) > 0 {
+	hasData := len(l.cache) > 0
+	if hasData {
 		if err := l.loadBatch(); err != nil {
 			log.Printf("Worker %d: Error during auto-flush: %v", l.workerID, err)
 		}
 	}
+	l.mu.Unlock()
 
 	l.flushTimer.Reset(l.config.BatchTimeout)
 }
@@ -88,46 +91,57 @@ func (l *loaderProcessor) Whitelist() []string {
 }
 
 func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers.Session) error {
+	// Set session info once on first call instead of every tick
+	if !l.sessionInfoSet && session != nil && len(session.SessionInfo.Sessions) > 0 {
+		sessionIndex := 0
+		if len(session.SessionInfo.Sessions) > 2 {
+			sessionIndex = 2
+		}
+		l.sessionID = session.SessionInfo.Sessions[sessionIndex].SessionNum
+		l.trackName = session.WeekendInfo.TrackDisplayShortName
+		l.trackID = session.WeekendInfo.TrackID
+		l.sessionInfoSet = true
+	}
+
 	if l.metrics.totalProcessed%50000 == 0 {
 		log.Printf("Worker %d: Processed %d records, current batch size: %d",
 			l.workerID, l.metrics.totalProcessed, len(l.cache))
 	}
 
-	startTime := time.Now()
+	enrichedInput := l.bufferPool.Get().(map[string]interface{})
 
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	for k := range enrichedInput {
+		delete(enrichedInput, k)
+	}
 
-	enrichedInput := make(map[string]interface{}, len(input)+2)
 	for k, v := range input {
 		enrichedInput[k] = v
 	}
+
 	enrichedInput["groupNum"] = l.groupNumber
 	enrichedInput["workerID"] = l.workerID
 
-	if session != nil && len(session.SessionInfo.Sessions) > 0 {
-		sessionIndex := 0
-		if len(session.SessionInfo.Sessions) > 2 {
-			sessionIndex = 2
-		}
-		enrichedInput["sessionID"] = session.SessionInfo.Sessions[sessionIndex].SessionNum
-
-		enrichedInput["trackDisplayShortName"] = session.WeekendInfo.TrackDisplayShortName
-		enrichedInput["trackID"] = session.WeekendInfo.TrackID
+	if l.sessionInfoSet {
+		enrichedInput["sessionID"] = l.sessionID
+		enrichedInput["trackDisplayShortName"] = l.trackName
+		enrichedInput["trackID"] = l.trackID
 	} else {
 		enrichedInput["sessionID"] = 0
 	}
 
-	estimatedSize := l.estimateJSONSize(enrichedInput)
+	estimatedSize := len(input)*20 + 100 // Rough estimate
 
-	maxOverage := l.thresholdBytes / 10
-	wouldExceedLimit := l.currentBytes+estimatedSize > l.thresholdBytes+maxOverage
-	if wouldExceedLimit && len(l.cache) > 0 {
+	l.mu.Lock()
+
+	shouldFlush := len(l.cache) >= 500 || l.currentBytes+estimatedSize > l.thresholdBytes
+	if shouldFlush && len(l.cache) > 0 {
 		if l.metrics.totalBatches%100 == 0 {
-			log.Printf("Worker %d: Flushing batch at %d records due to size limit",
+			log.Printf("Worker %d: Flushing batch at %d records",
 				l.workerID, len(l.cache))
 		}
 		if err := l.loadBatch(); err != nil {
+			l.mu.Unlock()
+			l.bufferPool.Put(enrichedInput)
 			return fmt.Errorf("failed to load batch: %w", err)
 		}
 	}
@@ -135,14 +149,12 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 	l.cache = append(l.cache, enrichedInput)
 	l.currentBytes += estimatedSize
 
-	l.metrics.mu.Lock()
 	l.metrics.totalProcessed++
-	processingTime := time.Since(startTime)
-	l.metrics.processingTime += processingTime
 	if len(l.cache) > l.metrics.maxBatchSize {
 		l.metrics.maxBatchSize = len(l.cache)
 	}
-	l.metrics.mu.Unlock()
+
+	l.mu.Unlock()
 
 	return nil
 }
@@ -213,8 +225,18 @@ func (l *loaderProcessor) loadBatch() error {
 		return nil
 	}
 
-	l.batchBuffer = l.batchBuffer[:len(l.cache)]
+	if cap(l.batchBuffer) < len(l.cache) {
+		l.batchBuffer = make([]map[string]interface{}, len(l.cache))
+	} else {
+		l.batchBuffer = l.batchBuffer[:len(l.cache)]
+	}
+
 	copy(l.batchBuffer, l.cache)
+
+	var err error
+	if !l.config.DisableRabbitMQ {
+		err = l.pubSub.Exec(l.batchBuffer)
+	}
 
 	for _, m := range l.cache {
 		l.bufferPool.Put(m)
@@ -224,14 +246,9 @@ func (l *loaderProcessor) loadBatch() error {
 	l.currentBytes = 0
 	l.lastFlush = time.Now()
 
-	l.metrics.mu.Lock()
 	l.metrics.totalBatches++
-	l.metrics.mu.Unlock()
 
-	// log.Printf("Worker %d: Loading batch of %d records (%d bytes)",
-	// 	l.workerID, len(batch), batchSize)
-
-	return l.pubSub.Exec(l.batchBuffer)
+	return err
 }
 
 func (l *loaderProcessor) Close() error {
@@ -256,9 +273,6 @@ func (l *loaderProcessor) Close() error {
 }
 
 func (l *loaderProcessor) logMetrics() {
-	l.metrics.mu.Lock()
-	defer l.metrics.mu.Unlock()
-
 	totalTime := time.Since(l.metrics.processingStarted).Milliseconds()
 	var pointsPerSecond int64
 	if totalTime > 0 {
@@ -274,7 +288,7 @@ func (l *loaderProcessor) logMetrics() {
 }
 
 func (l *loaderProcessor) GetMetrics() processorMetrics {
-	l.metrics.mu.Lock()
-	defer l.metrics.mu.Unlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.metrics
 }

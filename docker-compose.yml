@@ -59,6 +59,7 @@ services:
         limits:
           cpus: 1
           memory: 2g
+    shm_size: 256m
 
   telemetry_service:
     image: ghcr.io/ojparkinson/iracing-telemetryservice:latest
@@ -88,6 +89,7 @@ services:
         limits:
           cpus: 1
           memory: 2g
+    shm_size: 256m
     labels:
       com.centurylinklabs.watchtower.enable: "true"
       com.centurylinklabs.watchtower.monitor-only: "false"
@@ -112,6 +114,7 @@ services:
         limits:
           cpus: 1
           memory: 2g
+    shm_size: 256m
     labels:
       com.centurylinklabs.watchtower.enable: "true"
       com.centurylinklabs.watchtower.monitor-only: "false"

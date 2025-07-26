@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -15,14 +17,12 @@ import (
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/worker"
 )
 
+var progress *worker.ProgressDisplay
+
 func main() {
 	startTime := time.Now()
 
 	cfg := config.LoadConfig()
-
-	log.Printf("Starting telemetry application with %d workers", cfg.WorkerCount)
-	log.Printf("Configuration: BatchSize=%dKB, WorkerTimeout=%v, MaxRetries=%d",
-		cfg.BatchSizeBytes/1024, cfg.WorkerTimeout, cfg.MaxRetries)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -31,25 +31,28 @@ func main() {
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-signalCh
-		log.Println("Received shutdown signal. Gracefully shutting down...")
+		if progress != nil {
+			progress.AddLog("Received shutdown signal...")
+		}
 		cancel()
 	}()
 
 	if len(os.Args) < 2 {
-		log.Fatal("Usage: ./telemetry-app <telemetry-folder-path>")
+		log.Fatal("Usage: ./telemetry-app <telemetry-folder-path> [--test-mode]")
 	}
 
 	telemetryFolder := os.Args[1]
+	testMode := len(os.Args) > 2 && os.Args[2] == "--test-mode"
+
+	if testMode {
+		cfg.DisableRabbitMQ = true
+	}
 
 	if !strings.HasSuffix(telemetryFolder, string(filepath.Separator)) {
 		telemetryFolder += string(filepath.Separator)
 	}
 
-	log.Println("Processing IBT folder:", telemetryFolder)
-
 	pool := worker.NewWorkerPool(cfg)
-	pool.Start()
-	defer pool.Stop()
 
 	expectedFiles, err := discoverAndQueueFiles(ctx, pool, telemetryFolder)
 	if err != nil {
@@ -57,22 +60,33 @@ func main() {
 		return
 	}
 
+	progress = worker.NewProgressDisplay(cfg.WorkerCount, expectedFiles)
+	pool.SetProgressDisplay(progress)
+
+	log.SetOutput(io.Discard)
+
+	progress.Start()
+	defer progress.Stop()
+
+	progress.AddLog(fmt.Sprintf("Starting %d workers for %d files", cfg.WorkerCount, expectedFiles))
+
+	pool.Start()
+	defer pool.Stop()
+
 	waitForCompletion(ctx, pool, startTime, expectedFiles)
 
-	log.Printf("Application completed in %v", time.Since(startTime))
+	progress.AddLog(fmt.Sprintf("Completed in %v", time.Since(startTime)))
+	time.Sleep(2 * time.Second)
 }
 
 func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemetryFolder string) (int, error) {
 	directory := processing.NewDir(telemetryFolder)
 	files := directory.WatchDir()
 
-	log.Printf("Found %d files to examine", len(files))
-
 	filesQueued := 0
 	for _, file := range files {
 		select {
 		case <-ctx.Done():
-			log.Println("File discovery cancelled")
 			return filesQueued, ctx.Err()
 		default:
 		}
@@ -80,7 +94,6 @@ func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemet
 		fileName := file.Name()
 
 		if !strings.Contains(fileName, ".ibt") {
-			log.Printf("Skipping non-IBT file: %s", fileName)
 			continue
 		}
 
@@ -91,68 +104,28 @@ func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemet
 		}
 
 		if err := pool.SubmitFile(workItem); err != nil {
-			log.Printf("Failed to queue file %s: %v", fileName, err)
 			return filesQueued, err
 		}
 
 		filesQueued++
-		log.Printf("Queued file %d/%d: %s", filesQueued, len(files), fileName)
 	}
 
-	log.Printf("Successfully queued %d IBT files for processing", filesQueued)
 	return filesQueued, nil
 }
 
 func waitForCompletion(ctx context.Context, pool *worker.WorkerPool, startTime time.Time, expectedFiles int) {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	lastMetrics := worker.PoolMetrics{}
-	lastCheck := time.Now()
-	stableCount := 0
-
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Shutdown requested, stopping processing...")
+			progress.AddLog("Shutdown requested...")
 			return
-		case <-ticker.C:
-			metrics := pool.GetMetrics()
-
-			elapsed := time.Since(startTime)
-			log.Printf("=== Progress Update (elapsed: %v) ===", elapsed)
-			log.Printf("Files processed: %d/%d", metrics.TotalFilesProcessed, expectedFiles)
-			log.Printf("Records processed: %d", metrics.TotalRecordsProcessed)
-			log.Printf("Batches sent: %d", metrics.TotalBatchesProcessed)
-			log.Printf("Queue depth: %d", metrics.QueueDepth)
-			log.Printf("Active workers: %d", metrics.ActiveWorkers)
-			log.Printf("Errors: %d", metrics.TotalErrors)
-
-			if lastMetrics.TotalFilesProcessed > 0 {
-				filesDelta := metrics.TotalFilesProcessed - lastMetrics.TotalFilesProcessed
-				recordsDelta := metrics.TotalRecordsProcessed - lastMetrics.TotalRecordsProcessed
-				timeDelta := time.Since(lastCheck).Milliseconds()
-				if timeDelta > 0 {
-					log.Printf("Processing rate: %d files/ms, %d records/ms",
-						int64(filesDelta)/timeDelta, int64(recordsDelta)/timeDelta)
-				}
-			}
-
-			lastMetrics = metrics
-			lastCheck = time.Now()
-
 		default:
 			time.Sleep(200 * time.Millisecond)
 			metrics := pool.GetMetrics()
 
 			if metrics.QueueDepth == 0 && metrics.TotalFilesProcessed >= expectedFiles {
-				stableCount++
-				if stableCount >= 3 {
-					log.Printf("All %d files processed, shutting down...", expectedFiles)
-					return
-				}
-			} else {
-				stableCount = 0
+				progress.AddLog("All files processed!")
+				return
 			}
 		}
 	}

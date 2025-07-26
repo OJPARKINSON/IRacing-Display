@@ -16,7 +16,8 @@ type Config struct {
 	MaxRetries     int
 	RetryDelay     time.Duration
 
-	RabbitMQURL string
+	RabbitMQURL     string
+	DisableRabbitMQ bool
 
 	GoMaxProcs int
 	GOGC       int
@@ -38,7 +39,7 @@ type Config struct {
 
 func LoadConfig() *Config {
 	return &Config{
-		WorkerCount:   getEnvAsInt("WORKER_COUNT", 6),
+		WorkerCount:   getEnvAsInt("WORKER_COUNT", 10),
 		FileQueueSize: getEnvAsInt("FILE_QUEUE_SIZE", 50),
 		WorkerTimeout: getEnvAsDuration("WORKER_TIMEOUT", 30*time.Minute),
 
