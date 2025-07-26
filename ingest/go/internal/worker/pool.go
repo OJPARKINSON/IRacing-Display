@@ -22,6 +22,9 @@ type WorkerPool struct {
 	mu          sync.Mutex
 
 	rabbitPool *messaging.ConnectionPool
+
+	workerMetrics   []WorkerMetrics
+	progressDisplay *ProgressDisplay
 }
 
 type PoolMetrics struct {
@@ -32,6 +35,7 @@ type PoolMetrics struct {
 	StartTime             time.Time
 	ActiveWorkers         int
 	QueueDepth            int
+	WorkerMetrics         []WorkerMetrics
 }
 
 func NewWorkerPool(cfg *config.Config) *WorkerPool {
@@ -44,18 +48,33 @@ func NewWorkerPool(cfg *config.Config) *WorkerPool {
 
 	log.Printf("Created RabbitMQ connection pool with %d connections", cfg.RabbitMQPoolSize)
 
+	workerMetrics := make([]WorkerMetrics, cfg.WorkerCount)
+	for i := range workerMetrics {
+		workerMetrics[i] = WorkerMetrics{
+			WorkerID:     i,
+			LastActivity: time.Now(),
+			Status:       "IDLE",
+		}
+	}
+
 	return &WorkerPool{
-		config:      cfg,
-		fileQueue:   make(chan WorkItem, cfg.FileQueueSize),
-		resultsChan: make(chan WorkResult, cfg.WorkerCount*2),
-		errorsChan:  make(chan WorkError, cfg.WorkerCount*2),
-		ctx:         ctx,
-		cancel:      cancel,
-		rabbitPool:  rabbitPool,
+		config:        cfg,
+		fileQueue:     make(chan WorkItem, cfg.FileQueueSize),
+		resultsChan:   make(chan WorkResult, cfg.WorkerCount*2),
+		errorsChan:    make(chan WorkError, cfg.WorkerCount*2),
+		ctx:           ctx,
+		cancel:        cancel,
+		rabbitPool:    rabbitPool,
+		workerMetrics: workerMetrics,
 		metrics: PoolMetrics{
-			StartTime: time.Now(),
+			StartTime:     time.Now(),
+			WorkerMetrics: workerMetrics,
 		},
 	}
+}
+
+func (wp *WorkerPool) SetProgressDisplay(pd *ProgressDisplay) {
+	wp.progressDisplay = pd
 }
 
 func (wp *WorkerPool) Start() {
@@ -128,7 +147,46 @@ func (wp *WorkerPool) GetMetrics() PoolMetrics {
 
 	metrics := wp.metrics
 	metrics.QueueDepth = len(wp.fileQueue)
+
+	metrics.WorkerMetrics = make([]WorkerMetrics, len(wp.workerMetrics))
+	copy(metrics.WorkerMetrics, wp.workerMetrics)
+
 	return metrics
+}
+
+func (wp *WorkerPool) UpdateWorkerStatus(workerID int, currentFile, status string) {
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+
+	if workerID >= 0 && workerID < len(wp.workerMetrics) {
+		wp.workerMetrics[workerID].CurrentFile = currentFile
+		wp.workerMetrics[workerID].Status = status
+		wp.workerMetrics[workerID].LastActivity = time.Now()
+
+		if wp.progressDisplay != nil {
+			var displayStatus WorkerStatus
+			switch status {
+			case "PROCESSING":
+				displayStatus = StatusProcessing
+			case "ERROR":
+				displayStatus = StatusError
+			case "COMPLETED":
+				displayStatus = StatusCompleted
+			default:
+				displayStatus = StatusIdle
+			}
+
+			wm := wp.workerMetrics[workerID]
+			wp.progressDisplay.UpdateWorker(
+				workerID,
+				wm.FilesProcessed,
+				wm.TotalRecords,
+				wm.TotalBatches,
+				wm.CurrentFile,
+				displayStatus,
+			)
+		}
+	}
 }
 
 func (wp *WorkerPool) resultCollector() {
@@ -167,6 +225,42 @@ func (wp *WorkerPool) handleResult(result WorkResult) {
 	wp.metrics.TotalRecordsProcessed += result.ProcessedCount
 	wp.metrics.TotalBatchesProcessed += result.BatchCount
 	wp.metrics.QueueDepth--
+
+	if result.WorkerID >= 0 && result.WorkerID < len(wp.workerMetrics) {
+		wm := &wp.workerMetrics[result.WorkerID]
+		wm.FilesProcessed++
+		wm.TotalRecords += int64(result.ProcessedCount)
+		wm.TotalBatches += int64(result.BatchCount)
+		wm.TotalFileTime += result.Duration
+		wm.LastActivity = time.Now()
+		wm.CurrentFile = ""
+		wm.Status = "IDLE"
+
+		if wm.FilesProcessed > 0 {
+			wm.AvgTimePerFile = wm.TotalFileTime / time.Duration(wm.FilesProcessed)
+		}
+
+		if result.Duration.Seconds() > 0 {
+			wm.ProcessingRate = float64(result.ProcessedCount) / result.Duration.Seconds()
+		}
+	}
+
+	if wp.progressDisplay != nil {
+		status := StatusCompleted
+		if result.WorkerID >= 0 && result.WorkerID < len(wp.workerMetrics) {
+			wm := wp.workerMetrics[result.WorkerID]
+			wp.progressDisplay.UpdateWorkerWithTiming(
+				result.WorkerID,
+				wm.FilesProcessed,
+				wm.TotalRecords,
+				wm.TotalBatches,
+				wm.CurrentFile,
+				status,
+				wm.AvgTimePerFile,
+				wm.TotalFileTime,
+			)
+		}
+	}
 
 	log.Printf("Worker %d completed file %s: %d records in %d batches (took %v)",
 		result.WorkerID, result.FilePath, result.ProcessedCount,

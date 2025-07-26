@@ -73,6 +73,7 @@ services:
       ASPNETCORE_URLS: http://+:5000
       DOTNET_GCRetainVM: 1
       DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: true
+    shm_size: 256m
     labels:
       com.centurylinklabs.watchtower.enable: "true"
 
@@ -94,6 +95,7 @@ services:
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     networks:
       - telemetry-network
+    shm_size: 256m
 
   questdb:
     image: questdb/questdb:latest

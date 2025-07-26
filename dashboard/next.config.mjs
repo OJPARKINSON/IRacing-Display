@@ -4,13 +4,6 @@ const nextConfig = {
 	serverExternalPackages: ["pg"],
 	reactStrictMode: true,
 
-	// Experimental features that may cause issues on ARM
-	experimental: {
-		// Disable features that might cause issues on RPi
-		esmExternals: false,
-	},
-
-	// Compiler optimizations - be more conservative for ARM
 	compiler: {
 		removeConsole:
 			process.env.NODE_ENV === "production"
@@ -26,79 +19,6 @@ const nextConfig = {
 		minimumCacheTTL: 86400, // 24 hours
 		dangerouslyAllowSVG: true,
 		contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
-	},
-
-	// Bundle optimization - more conservative for ARM
-	webpack: (config, { dev, isServer }) => {
-		// Fix for ARM/RPi deployment issues
-		config.resolve.fallback = {
-			...config.resolve.fallback,
-			fs: false,
-			net: false,
-			tls: false,
-			crypto: false,
-		};
-
-		// Ensure proper module resolution for ARM
-		config.resolve.alias = {
-			...config.resolve.alias,
-			// Force specific versions to prevent conflicts
-		};
-
-		// Production optimizations - more conservative
-		if (!dev) {
-			config.optimization = {
-				...config.optimization,
-				splitChunks: {
-					chunks: "all",
-					minSize: 20000,
-					maxSize: 200000, // Smaller chunks for ARM
-					cacheGroups: {
-						default: {
-							minChunks: 2,
-							priority: -20,
-							reuseExistingChunk: true,
-						},
-						vendor: {
-							test: /[\\/]node_modules[\\/]/,
-							name: "vendors",
-							priority: 10,
-							reuseExistingChunk: true,
-							chunks: "all",
-						},
-						// More conservative chunking for ARM
-						frameworks: {
-							test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
-							name: "frameworks",
-							priority: 40,
-							chunks: "all",
-							enforce: true,
-						},
-					},
-				},
-				// More conservative optimization for ARM
-				usedExports: true,
-				sideEffects: false,
-				minimize: true,
-			};
-		}
-
-		// Development optimizations
-		if (dev && !isServer) {
-			config.watchOptions = {
-				...config.watchOptions,
-				poll: 1000,
-				aggregateTimeout: 300,
-			};
-		}
-
-		// Ensure compatibility with ARM architecture
-		config.module.rules.push({
-			test: /\.node$/,
-			use: "node-loader",
-		});
-
-		return config;
 	},
 
 	// Headers for caching and performance

@@ -57,6 +57,6 @@ ENV PORT=3000
 HEALTHCHECK --interval=60s --timeout=30s --start-period=80s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })" || exit 1
 
-ENV NODE_OPTIONS="--max-old-space-size=512 --optimize-for-size --gc-interval=100"
+ENV NODE_OPTIONS="--max-old-space-size=512 --gc-interval=100"
 
 CMD ["sh", "-c", "if [ -f server.js ]; then node server.js; else npm start; fi"]

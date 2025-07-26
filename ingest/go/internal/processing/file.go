@@ -13,7 +13,7 @@ import (
 
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/config"
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/messaging"
-	"github.com/teamjorge/ibt"
+	"github.com/OJPARKINSON/ibt"
 )
 
 type FileProcessor struct {
@@ -61,12 +61,14 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 		return nil, fmt.Errorf("no files found matching pattern: %s", fullPath)
 	}
 
-	log.Printf("Worker %d: Found %d files to process", fp.workerID, len(files))
+	log.Printf("Worker %d: Found %d files to process: %v", fp.workerID, len(files), files)
 
+	log.Printf("Worker %d: About to parse stubs from files", fp.workerID)
 	stubs, err := ibt.ParseStubs(files...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse stubs for %v: %w", files, err)
 	}
+	log.Printf("Worker %d: Successfully parsed %d stubs", fp.workerID, len(stubs))
 
 	if len(stubs) == 0 {
 		return nil, fmt.Errorf("no telemetry data found in IBT file: %s", fileName)
@@ -75,14 +77,16 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 	headers := stubs[0].Headers()
 	weekendInfo := headers.SessionInfo.WeekendInfo
 
-	// Create optimized PubSub with connection pool
-	fp.pubSub = messaging.NewPubSub(
-		strconv.Itoa(weekendInfo.SubSessionID),
-		sessionTime,
-		fp.config,
-		fp.pool,
-	)
+	if !fp.config.DisableRabbitMQ {
+		fp.pubSub = messaging.NewPubSub(
+			strconv.Itoa(weekendInfo.SubSessionID),
+			sessionTime,
+			fp.config,
+			fp.pool,
+		)
+	}
 
+	log.Printf("Worker %d: About to group telemetry data", fp.workerID)
 	groups := stubs.Group()
 	log.Printf("Worker %d: Grouped telemetry data into %d groups", fp.workerID, len(groups))
 
@@ -106,6 +110,7 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 		log.Printf("Worker %d: Starting processing for group %d", fp.workerID, groupNumber)
 		startGroup := time.Now()
 
+		log.Printf("Worker %d: About to call ibt.Process for group %d with %d records", fp.workerID, groupNumber, len(group))
 		if err := ibt.Process(ctx, group, processor); err != nil {
 			if ctx.Err() == context.Canceled {
 				log.Printf("Worker %d: Processing of group %d was canceled", fp.workerID, groupNumber)

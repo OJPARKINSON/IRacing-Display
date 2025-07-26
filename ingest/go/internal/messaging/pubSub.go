@@ -51,7 +51,7 @@ func NewConnectionPool(url string, poolSize int) (*ConnectionPool, error) {
 			ch.Close()
 			conn.Close()
 			pool.Close()
-			return nil, fmt.Errorf("failed to enable confirms for channel %d: %w", i, err)
+			return nil, fmt.Errorf("failed to set Qos for channel %d: %w", i, err)
 		}
 
 		pool.connections[i] = conn
@@ -62,8 +62,8 @@ func NewConnectionPool(url string, poolSize int) (*ConnectionPool, error) {
 }
 
 func (p *ConnectionPool) GetChannel() *amqp.Channel {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
 	ch := p.channels[p.current]
 	p.current = (p.current + 1) % p.poolSize
@@ -96,7 +96,6 @@ type PubSub struct {
 	messageBatch []amqp.Publishing
 	batchSize    int
 	maxBatchSize int
-	flushTimer   *time.Timer
 	workerID     int
 
 	totalMessages int64
@@ -120,20 +119,7 @@ func NewPubSub(sessionId string, sessionTime time.Time, cfg *config.Config, pool
 		lastFlush:    time.Now(),
 	}
 
-	ps.flushTimer = time.AfterFunc(50*time.Millisecond, ps.flushTimerCallback)
-
 	return ps
-}
-
-func (ps *PubSub) flushTimerCallback() {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-
-	if len(ps.messageBatch) > 0 {
-		ps.flushBatch()
-	}
-
-	ps.flushTimer.Reset(50 * time.Millisecond)
 }
 
 func getFloatValue(record map[string]interface{}, key string) float64 {
@@ -195,7 +181,6 @@ func (ps *PubSub) Exec(data []map[string]interface{}) error {
 		}
 	}
 
-	// Process all records in this batch
 	batchMessages := make([]map[string]interface{}, 0, len(data))
 
 	for _, record := range data {
@@ -275,18 +260,15 @@ func (ps *PubSub) Exec(data []map[string]interface{}) error {
 		batchMessages = append(batchMessages, tick)
 	}
 
-	// Convert to JSON array for efficient batching
 	jsonData, err := json.Marshal(batchMessages)
 	if err != nil {
 		return fmt.Errorf("error marshaling batch to JSON: %w", err)
 	}
 
-	// Create publishing message
 	publishing := amqp.Publishing{
 		ContentType:  "application/json",
 		Body:         jsonData,
-		DeliveryMode: amqp.Transient, // Use transient for maximum performance
-		Timestamp:    time.Now(),
+		DeliveryMode: amqp.Transient,
 		Headers: amqp.Table{
 			"worker_id":  workerID,
 			"batch_size": len(data),
@@ -299,8 +281,7 @@ func (ps *PubSub) Exec(data []map[string]interface{}) error {
 	ps.batchSize += len(jsonData)
 	ps.totalMessages += int64(len(data))
 
-	// Flush if batch is full or large enough
-	if len(ps.messageBatch) >= ps.maxBatchSize || ps.batchSize >= ps.config.BatchSizeBytes {
+	if len(ps.messageBatch) >= ps.maxBatchSize {
 		ps.flushBatch()
 	}
 
@@ -313,71 +294,35 @@ func (ps *PubSub) flushBatch() {
 		return
 	}
 
-	// Get channel from pool
 	ch := ps.pool.GetChannel()
 
-	// Publish all messages in batch using NotifyPublish for confirms
-	confirms := ch.NotifyPublish(make(chan amqp.Confirmation, len(ps.messageBatch)))
-
-	// Publish all messages
 	for _, msg := range ps.messageBatch {
-		err := ch.PublishWithContext(
-			ps.ctx,
+		if err := ch.Publish(
 			"telemetry_topic",
 			"telemetry.ticks",
-			false, // mandatory - false for performance
-			false, // immediate - false for performance
+			false,
+			false,
 			msg,
-		)
-		if err != nil {
-			log.Printf("Failed to publish message: %v", err)
-			continue
+		); err != nil {
+			log.Printf("Worker %d: Failed to publish message: %v", ps.workerID, err)
+			break
 		}
 	}
 
-	// Wait for confirms (optional - remove for maximum throughput)
-	go func() {
-		batchSize := len(ps.messageBatch)
-		confirmed := 0
-		for confirmed < batchSize {
-			select {
-			case confirm := <-confirms:
-				if !confirm.Ack {
-					log.Printf("Message not acknowledged: %d", confirm.DeliveryTag)
-				}
-				confirmed++
-			case <-time.After(5 * time.Second):
-				log.Printf("Timeout waiting for confirms, got %d/%d", confirmed, batchSize)
-				return
-			}
-		}
-	}()
-
-	// Reset batch
 	ps.messageBatch = ps.messageBatch[:0]
 	ps.batchSize = 0
 	ps.totalBatches++
 	ps.lastFlush = time.Now()
 
-	// Log performance metrics periodically
 	if ps.totalBatches%100 == 0 {
-		elapsed := time.Since(ps.lastFlush)
-		if elapsed > 0 {
-			rate := float64(ps.totalMessages) / time.Since(ps.lastFlush).Seconds()
-			log.Printf("Worker %d: Published %d messages in %d batches (%.0f msg/sec)",
-				ps.workerID, ps.totalMessages, ps.totalBatches, rate)
-		}
+		rate := float64(ps.totalMessages) / time.Since(ps.lastFlush).Seconds()
+		log.Printf("Worker %d: Published %d messages in %d batches (%.0f msg/sec)",
+			ps.workerID, ps.totalMessages, ps.totalBatches, rate)
 	}
 }
 
 func (ps *PubSub) Close() error {
-	// Stop timer
-	if ps.flushTimer != nil {
-		ps.flushTimer.Stop()
-	}
-
 	ps.mu.Lock()
-	// Flush any remaining messages
 	ps.flushBatch()
 	ps.mu.Unlock()
 
