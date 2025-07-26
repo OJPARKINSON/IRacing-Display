@@ -106,14 +106,14 @@ services:
       - questdb-data:/root/.questdb
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks:
-      - telemetry-network
     healthcheck:
       test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/8812' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
+    networks:
+      - telemetry-network
 
   watchtower:
     image: containrrr/watchtower
