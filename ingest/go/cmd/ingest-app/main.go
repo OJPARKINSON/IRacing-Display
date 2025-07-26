@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -20,19 +19,6 @@ func main() {
 	startTime := time.Now()
 
 	cfg := config.LoadConfig()
-
-	go func() {
-		log.Println("Starting pprof server on :6060")
-		log.Println("Access profiles at:")
-		log.Println("  CPU Profile: http://localhost:6060/debug/pprof/profile?seconds=30")
-		log.Println("  Memory Profile: http://localhost:6060/debug/pprof/heap")
-		log.Println("  Goroutine Profile: http://localhost:6060/debug/pprof/goroutine")
-		log.Println("  All Profiles: http://localhost:6060/debug/pprof/")
-
-		if err := http.ListenAndServe(":6060", nil); err != nil {
-			log.Printf("pprof server failed: %v", err)
-		}
-	}()
 
 	log.Printf("Starting telemetry application with %d workers", cfg.WorkerCount)
 	log.Printf("Configuration: BatchSize=%dKB, WorkerTimeout=%v, MaxRetries=%d",
@@ -147,7 +133,7 @@ func waitForCompletion(ctx context.Context, pool *worker.WorkerPool, startTime t
 				recordsDelta := metrics.TotalRecordsProcessed - lastMetrics.TotalRecordsProcessed
 				timeDelta := time.Since(lastCheck).Milliseconds()
 				if timeDelta > 0 {
-					log.Printf("Processing rate: %.1f files/ms, %.0f records/ms",
+					log.Printf("Processing rate: %d files/ms, %d records/ms",
 						int64(filesDelta)/timeDelta, int64(recordsDelta)/timeDelta)
 				}
 			}

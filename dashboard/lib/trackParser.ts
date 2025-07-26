@@ -1,8 +1,23 @@
 // @filename: lib/trackParser.ts
-import { SVGPathData } from "svg-pathdata";
+// ARM-compatible version without external SVG dependencies
 
 /**
- * Parses an SVG path and extracts points at regular intervals
+ * Simple SVG path parser that works without external dependencies
+ * This is a lightweight alternative to svg-pathdata for better ARM compatibility
+ */
+
+interface PathCommand {
+	type: string;
+	x?: number;
+	y?: number;
+	x1?: number;
+	y1?: number;
+	x2?: number;
+	y2?: number;
+}
+
+/**
+ * Parses a simple SVG path and extracts points at regular intervals
  * @param svgPath The SVG path string (d attribute)
  * @param numPoints Number of points to extract (higher for more precision)
  * @returns Array of [x,y] coordinates representing the track center line
@@ -12,195 +27,319 @@ export function parseSvgPath(
 	numPoints = 200,
 ): [number, number][] {
 	try {
-		// Parse the SVG path
-		const pathData = new SVGPathData(svgPath);
+		// Simple path parser for basic commands (M, L, C, Z)
+		const commands = parsePathCommands(svgPath);
 
-		// Convert to absolute positions
-		const absolutePathData = pathData.toAbs();
-
-		// Get total length of the path (approximate)
-		const length = getApproximatePathLength(absolutePathData);
-
-		// Sample points at regular intervals
-		const points: [number, number][] = [];
-
-		for (let i = 0; i < numPoints; i++) {
-			const t = i / (numPoints - 1);
-			const point = getPointAtLength(absolutePathData, t * length);
-			points.push([point.x, point.y]);
+		if (commands.length === 0) {
+			console.warn("No valid path commands found");
+			return [];
 		}
 
-		return points;
+		// Convert commands to coordinate points
+		const pathPoints = commandsToPoints(commands);
+
+		if (pathPoints.length === 0) {
+			console.warn("No points generated from path commands");
+			return [];
+		}
+
+		// Resample to get the requested number of points
+		return resamplePoints(pathPoints, numPoints);
 	} catch (error) {
 		console.error("Error parsing SVG path:", error);
-		return [];
+		// Fallback: return a simple rectangular track
+		return generateFallbackTrack(numPoints);
 	}
 }
 
 /**
- * Helper function to get an approximate length of the path
- * (This is a simplification - a real implementation would account for curve lengths)
+ * Simple path command parser
  */
-function getApproximatePathLength(pathData: any): number {
-	let length = 0;
-	let prevX = 0;
-	let prevY = 0;
-	let firstX = 0;
-	let firstY = 0;
-	let hasFirstPoint = false;
+function parsePathCommands(pathString: string): PathCommand[] {
+	const commands: PathCommand[] = [];
 
-	// Process each command in the path
-	pathData.commands.forEach((cmd: any) => {
-		switch (cmd.type) {
-			case SVGPathData.MOVE_TO:
-				if (!hasFirstPoint) {
-					firstX = cmd.x;
-					firstY = cmd.y;
-					hasFirstPoint = true;
+	// Clean up the path string
+	const cleanPath = pathString
+		.replace(/,/g, " ")
+		.replace(/([MmLlCcSsQqTtAaHhVvZz])/g, " $1 ")
+		.replace(/\s+/g, " ")
+		.trim();
+
+	const tokens = cleanPath.split(" ").filter((token) => token.length > 0);
+
+	let currentX = 0;
+	let currentY = 0;
+	let i = 0;
+
+	while (i < tokens.length) {
+		const command = tokens[i];
+
+		switch (command.toUpperCase()) {
+			case "M": // Move to
+				if (i + 2 < tokens.length) {
+					const x = parseFloat(tokens[i + 1]);
+					const y = parseFloat(tokens[i + 2]);
+					if (!isNaN(x) && !isNaN(y)) {
+						currentX = command === "M" ? x : currentX + x;
+						currentY = command === "M" ? y : currentY + y;
+						commands.push({ type: "M", x: currentX, y: currentY });
+					}
+					i += 3;
+				} else {
+					i++;
 				}
-				prevX = cmd.x;
-				prevY = cmd.y;
 				break;
 
-			case SVGPathData.LINE_TO:
-				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
-				prevX = cmd.x;
-				prevY = cmd.y;
+			case "L": // Line to
+				if (i + 2 < tokens.length) {
+					const x = parseFloat(tokens[i + 1]);
+					const y = parseFloat(tokens[i + 2]);
+					if (!isNaN(x) && !isNaN(y)) {
+						currentX = command === "L" ? x : currentX + x;
+						currentY = command === "L" ? y : currentY + y;
+						commands.push({ type: "L", x: currentX, y: currentY });
+					}
+					i += 3;
+				} else {
+					i++;
+				}
 				break;
 
-			case SVGPathData.HORIZ_LINE_TO:
-				length += Math.abs(cmd.x - prevX);
-				prevX = cmd.x;
+			case "C": // Cubic Bezier curve
+				if (i + 6 < tokens.length) {
+					const x1 = parseFloat(tokens[i + 1]);
+					const y1 = parseFloat(tokens[i + 2]);
+					const x2 = parseFloat(tokens[i + 3]);
+					const y2 = parseFloat(tokens[i + 4]);
+					const x = parseFloat(tokens[i + 5]);
+					const y = parseFloat(tokens[i + 6]);
+
+					if (
+						!isNaN(x1) &&
+						!isNaN(y1) &&
+						!isNaN(x2) &&
+						!isNaN(y2) &&
+						!isNaN(x) &&
+						!isNaN(y)
+					) {
+						if (command === "c") {
+							// Relative coordinates
+							commands.push({
+								type: "C",
+								x1: currentX + x1,
+								y1: currentY + y1,
+								x2: currentX + x2,
+								y2: currentY + y2,
+								x: currentX + x,
+								y: currentY + y,
+							});
+							currentX += x;
+							currentY += y;
+						} else {
+							// Absolute coordinates
+							commands.push({ type: "C", x1, y1, x2, y2, x, y });
+							currentX = x;
+							currentY = y;
+						}
+					}
+					i += 7;
+				} else {
+					i++;
+				}
 				break;
 
-			case SVGPathData.VERT_LINE_TO:
-				length += Math.abs(cmd.y - prevY);
-				prevY = cmd.y;
+			case "Z": // Close path
+				commands.push({ type: "Z" });
+				i++;
 				break;
 
-			case SVGPathData.CLOSE_PATH:
-				length += Math.sqrt((firstX - prevX) ** 2 + (firstY - prevY) ** 2);
-				prevX = firstX;
-				prevY = firstY;
-				break;
-
-			// For curves, we're simplifying by using line segments
-			// A proper implementation would use curve length formulas
-			case SVGPathData.CURVE_TO:
-				// Approximate with a line to the end point
-				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
-				prevX = cmd.x;
-				prevY = cmd.y;
-				break;
-
-			case SVGPathData.SMOOTH_CURVE_TO:
-				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
-				prevX = cmd.x;
-				prevY = cmd.y;
-				break;
-
-			case SVGPathData.QUAD_TO:
-				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
-				prevX = cmd.x;
-				prevY = cmd.y;
-				break;
-
-			case SVGPathData.SMOOTH_QUAD_TO:
-				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
-				prevX = cmd.x;
-				prevY = cmd.y;
-				break;
-
-			// Arc approximation
-			case SVGPathData.ARC:
-				length += Math.sqrt((cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2);
-				prevX = cmd.x;
-				prevY = cmd.y;
+			default:
+				// Skip unknown commands
+				i++;
 				break;
 		}
-	});
+	}
 
-	return length;
+	return commands;
 }
 
 /**
- * Get point at a specific distance along the path
- * @param pathData The SVG path data
- * @param targetLength Distance along the path
- * @returns {x, y} coordinates
+ * Convert path commands to a series of coordinate points
  */
-function getPointAtLength(
-	pathData: any,
-	targetLength: number,
-): { x: number; y: number } {
+function commandsToPoints(commands: PathCommand[]): [number, number][] {
+	const points: [number, number][] = [];
+	let currentX = 0;
+	let currentY = 0;
+	let startX = 0;
+	let startY = 0;
+
+	for (const command of commands) {
+		switch (command.type) {
+			case "M":
+				currentX = command.x!;
+				currentY = command.y!;
+				startX = currentX;
+				startY = currentY;
+				points.push([currentX, currentY]);
+				break;
+
+			case "L":
+				currentX = command.x!;
+				currentY = command.y!;
+				points.push([currentX, currentY]);
+				break;
+
+			case "C": {
+				// Approximate cubic Bezier curve with line segments
+				const curvePoints = approximateCubicBezier(
+					currentX,
+					currentY,
+					command.x1!,
+					command.y1!,
+					command.x2!,
+					command.y2!,
+					command.x!,
+					command.y!,
+					10, // Number of segments
+				);
+				points.push(...curvePoints);
+				currentX = command.x!;
+				currentY = command.y!;
+				break;
+			}
+
+			case "Z":
+				// Close path by connecting to start
+				if (currentX !== startX || currentY !== startY) {
+					points.push([startX, startY]);
+				}
+				break;
+		}
+	}
+
+	return points;
+}
+
+/**
+ * Approximate a cubic Bezier curve with line segments
+ */
+function approximateCubicBezier(
+	x0: number,
+	y0: number,
+	x1: number,
+	y1: number,
+	x2: number,
+	y2: number,
+	x3: number,
+	y3: number,
+	segments: number,
+): [number, number][] {
+	const points: [number, number][] = [];
+
+	for (let i = 1; i <= segments; i++) {
+		const t = i / segments;
+		const mt = 1 - t;
+
+		const x =
+			mt * mt * mt * x0 +
+			3 * mt * mt * t * x1 +
+			3 * mt * t * t * x2 +
+			t * t * t * x3;
+
+		const y =
+			mt * mt * mt * y0 +
+			3 * mt * mt * t * y1 +
+			3 * mt * t * t * y2 +
+			t * t * t * y3;
+
+		points.push([x, y]);
+	}
+
+	return points;
+}
+
+/**
+ * Resample points to get a specific number of evenly distributed points
+ */
+function resamplePoints(
+	points: [number, number][],
+	targetCount: number,
+): [number, number][] {
+	if (points.length === 0) return [];
+	if (points.length <= targetCount) return points;
+
+	const result: [number, number][] = [];
+	const totalLength = calculateTotalLength(points);
+	const segmentLength = totalLength / (targetCount - 1);
+
+	result.push(points[0]); // Always include first point
+
 	let currentLength = 0;
-	let prevX = 0;
-	let prevY = 0;
-	let firstX = 0;
-	let firstY = 0;
-	let hasFirstPoint = false;
+	let targetLength = segmentLength;
 
-	// Process each command to find where targetLength falls
-	for (const cmd of pathData.commands) {
-		switch (cmd.type) {
-			case SVGPathData.MOVE_TO:
-				if (!hasFirstPoint) {
-					firstX = cmd.x;
-					firstY = cmd.y;
-					hasFirstPoint = true;
-				}
-				prevX = cmd.x;
-				prevY = cmd.y;
-				break;
+	for (let i = 1; i < points.length; i++) {
+		const segLength = distance(points[i - 1], points[i]);
+		currentLength += segLength;
 
-			case SVGPathData.LINE_TO: {
-				const segmentLength = Math.sqrt(
-					(cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2,
-				);
+		while (currentLength >= targetLength && result.length < targetCount - 1) {
+			// Interpolate point at target length
+			const excess = currentLength - targetLength;
+			const ratio = (segLength - excess) / segLength;
 
-				if (currentLength + segmentLength >= targetLength) {
-					// Target point is on this segment
-					const t = (targetLength - currentLength) / segmentLength;
-					return {
-						x: prevX + t * (cmd.x - prevX),
-						y: prevY + t * (cmd.y - prevY),
-					};
-				}
+			const x = points[i - 1][0] + ratio * (points[i][0] - points[i - 1][0]);
+			const y = points[i - 1][1] + ratio * (points[i][1] - points[i - 1][1]);
 
-				currentLength += segmentLength;
-				prevX = cmd.x;
-				prevY = cmd.y;
-				break;
-			}
-
-			// Similar handling for other command types...
-			// For brevity, I'm focusing on LINE_TO, but the same pattern applies
-
-			case SVGPathData.CURVE_TO: {
-				// Simplification - treating curves as lines to end point
-				const segmentLength = Math.sqrt(
-					(cmd.x - prevX) ** 2 + (cmd.y - prevY) ** 2,
-				);
-
-				if (currentLength + segmentLength >= targetLength) {
-					// Target point is on this segment - linearly interpolate
-					const t = (targetLength - currentLength) / segmentLength;
-					return {
-						x: prevX + t * (cmd.x - prevX),
-						y: prevY + t * (cmd.y - prevY),
-					};
-				}
-
-				currentLength += segmentLength;
-				prevX = cmd.x;
-				prevY = cmd.y;
-				break;
-			}
+			result.push([x, y]);
+			targetLength += segmentLength;
 		}
 	}
 
-	// If we get here, return the last point
-	return { x: prevX, y: prevY };
+	// Always include last point if we don't have enough points
+	if (result.length < targetCount) {
+		result.push(points[points.length - 1]);
+	}
+
+	return result;
+}
+
+/**
+ * Calculate total length of a path
+ */
+function calculateTotalLength(points: [number, number][]): number {
+	let totalLength = 0;
+	for (let i = 1; i < points.length; i++) {
+		totalLength += distance(points[i - 1], points[i]);
+	}
+	return totalLength;
+}
+
+/**
+ * Calculate distance between two points
+ */
+function distance(p1: [number, number], p2: [number, number]): number {
+	const dx = p2[0] - p1[0];
+	const dy = p2[1] - p1[1];
+	return Math.sqrt(dx * dx + dy * dy);
+}
+
+/**
+ * Generate a fallback rectangular track if path parsing fails
+ */
+function generateFallbackTrack(numPoints: number): [number, number][] {
+	const points: [number, number][] = [];
+	const width = 1000;
+	const height = 500;
+	const centerX = width / 2;
+	const centerY = height / 2;
+
+	for (let i = 0; i < numPoints; i++) {
+		const angle = (i / numPoints) * 2 * Math.PI;
+		const x = centerX + (width / 2 - 50) * Math.cos(angle);
+		const y = centerY + (height / 2 - 50) * Math.sin(angle);
+		points.push([x, y]);
+	}
+
+	return points;
 }
 
 /**
