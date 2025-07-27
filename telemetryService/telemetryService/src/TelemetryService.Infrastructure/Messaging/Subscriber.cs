@@ -12,14 +12,12 @@ public class Subscriber
 {
     private const int MaxRetryAttempts = 10;
     private const int RetryDelayMs = 5000;
-    private readonly InfluxService _influxService;
     private readonly QuestDbService _questDbService;
     private readonly Telemetry _telemetryService;
 
-    public Subscriber(Telemetry telemetryService, InfluxService influxService, QuestDbService questDbService)
+    public Subscriber(Telemetry telemetryService, QuestDbService questDbService)
     {
         _telemetryService = telemetryService;
-        _influxService = influxService;
         _questDbService = questDbService;
     }
 
@@ -102,10 +100,9 @@ public class Subscriber
 
                 List<TelemetryData> telemetryData = _telemetryService.Parse(message);
 
-                var influxTask = _influxService.WriteTicks(telemetryData);
                 var questTask = _questDbService.WriteTick(telemetryData);
                 
-                await Task.WhenAll(influxTask, questTask);
+                await Task.WhenAll(questTask);
             }
             catch (Exception ex)
             {
@@ -120,7 +117,6 @@ public class Subscriber
 
         Console.WriteLine("Consumer registered. Waiting for messages...");
 
-        // Keep the connection alive
         await Task.Delay(Timeout.Infinite);
     }
 }

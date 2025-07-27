@@ -1,5 +1,3 @@
-github.com/OJPARKINSON/ibt v0.0.0-20250726143902-84776e9ce68d h1:WNN/BezSYnf5LmNnpQ9WPfT/eVVGFssepoQTXdsZE0U=
-github.com/OJPARKINSON/ibt v0.0.0-20250726143902-84776e9ce68d/go.mod h1:Dg7fP7HxCCRFxK/3zGcfwHODLsl0NP9Jnem7I3/zUHY=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/fatih/color v1.18.0 h1:S8gINlzdQ840/4pfAwic/ZE0djQEH3wM94VfqLTZcOM=
 github.com/fatih/color v1.18.0/go.mod h1:4FelSpRwEGDpQ12mAdzqdOukCy4u8WUtOY6lkT/6HfU=

@@ -39,33 +39,33 @@ type Config struct {
 
 func LoadConfig() *Config {
 	return &Config{
-		WorkerCount:   getEnvAsInt("WORKER_COUNT", 10),
-		FileQueueSize: getEnvAsInt("FILE_QUEUE_SIZE", 50),
+		WorkerCount:   getEnvAsInt("WORKER_COUNT", 20),
+		FileQueueSize: getEnvAsInt("FILE_QUEUE_SIZE", 100),
 		WorkerTimeout: getEnvAsDuration("WORKER_TIMEOUT", 30*time.Minute),
 
-		BatchSizeBytes: getEnvAsInt("BATCH_SIZE_BYTES", 250000), // 250KB
-		BatchTimeout:   getEnvAsDuration("BATCH_TIMEOUT", 5*time.Second),
+		BatchSizeBytes: getEnvAsInt("BATCH_SIZE_BYTES", 1048576),
+		BatchTimeout:   getEnvAsDuration("BATCH_TIMEOUT", 2*time.Second),
 		MaxRetries:     getEnvAsInt("MAX_RETRIES", 3),
-		RetryDelay:     getEnvAsDuration("RETRY_DELAY", 500*time.Millisecond),
+		RetryDelay:     getEnvAsDuration("RETRY_DELAY", 250*time.Millisecond),
 
 		RabbitMQURL: getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
 
 		GoMaxProcs: getEnvAsInt("GOMAXPROCS", 0),
-		GOGC:       getEnvAsInt("GOGC", 100),
+		GOGC:       getEnvAsInt("GOGC", 50),
 
 		EnablePprof:  getEnvAsBool("ENABLE_PPROF", true),
 		PprofPort:    getEnv("PPROF_PORT", "6060"),
 		MemoryTuning: getEnvAsBool("MEMORY_TUNING", true),
 
-		RabbitMQPoolSize:      getEnvAsInt("RABBITMQ_POOL_SIZE", 4),
-		RabbitMQPrefetchCount: getEnvAsInt("RABBITMQ_PREFETCH_COUNT", 1000),
-		RabbitMQBatchSize:     getEnvAsInt("RABBITMQ_BATCH_SIZE", 100),
-		RabbitMQBatchTimeout:  getEnvAsDuration("RABBITMQ_BATCH_TIMEOUT", 50*time.Millisecond),
-		RabbitMQConfirms:      getEnvAsBool("RABBITMQ_CONFIRMS", true),
-		RabbitMQPersistent:    getEnvAsBool("RABBITMQ_PERSISTENT", false), // Transient for performance
-		RabbitMQHeartbeat:     getEnvAsDuration("RABBITMQ_HEARTBEAT", 60*time.Second),
-		RabbitMQChannelMax:    getEnvAsInt("RABBITMQ_CHANNEL_MAX", 2048),
-		RabbitMQFrameSize:     getEnvAsInt("RABBITMQ_FRAME_SIZE", 131072), // 128KB frames
+		RabbitMQPoolSize:      getEnvAsInt("RABBITMQ_POOL_SIZE", 8),
+		RabbitMQPrefetchCount: getEnvAsInt("RABBITMQ_PREFETCH_COUNT", 2000),
+		RabbitMQBatchSize:     getEnvAsInt("RABBITMQ_BATCH_SIZE", 200),
+		RabbitMQBatchTimeout:  getEnvAsDuration("RABBITMQ_BATCH_TIMEOUT", 25*time.Millisecond),
+		RabbitMQConfirms:      getEnvAsBool("RABBITMQ_CONFIRMS", false),
+		RabbitMQPersistent:    getEnvAsBool("RABBITMQ_PERSISTENT", false),
+		RabbitMQHeartbeat:     getEnvAsDuration("RABBITMQ_HEARTBEAT", 30*time.Second),
+		RabbitMQChannelMax:    getEnvAsInt("RABBITMQ_CHANNEL_MAX", 4096),
+		RabbitMQFrameSize:     getEnvAsInt("RABBITMQ_FRAME_SIZE", 1048576),
 	}
 }
 

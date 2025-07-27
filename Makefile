@@ -10,8 +10,8 @@ restart:
 	@docker-compose --file docker-compose.dev.yml up -d
 	@echo "✅ Done! Check logs with: make logs"
 
-restart-ui:
+restart-lite:
 	@echo "🚀 Restarting Dashboard..."
-	@docker-compose --file docker-compose.dev.yml build --no-cache
+	@docker-compose --file docker-compose.dev.yml build --no-cache 
 	@docker-compose --file docker-compose.dev.yml up -d
 	@echo "✅ Done! Check logs with: make logs"

@@ -1,38 +1,4 @@
 services:
-  influxdb:
-    image: influxdb:2
-    container_name: influxdb
-    restart: always
-    ports:
-      - "8086:8086"
-    environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_ADMIN_USERNAME}
-      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_ADMIN_PASSWORD}
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN}
-      DOCKER_INFLUXDB_INIT_ORG: myorg
-      DOCKER_INFLUXDB_INIT_BUCKET: telemetry
-    volumes:
-      - influxdb2-data:/var/lib/influxdb2
-      - influxdb2-config:/etc/influxdb2
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8086/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-    networks:
-      - telemetry-network
-    deploy:
-      resources:
-        limits:
-          cpus: 1
-          memory: 1g
-
   rabbitMQ:
     container_name: rabbitMQ
     image: rabbitmq:4.0-management
@@ -68,18 +34,12 @@ services:
     ports:
       - "5000:5000"
     depends_on:
-      influxdb:
-        condition: service_healthy
       rabbitMQ:
         condition: service_healthy
     networks:
       - telemetry-network
     environment:
-      INFLUXDB_URL: ${INFLUXDB_URL}
-      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
       QUESTDB_URL: ${QUESTDB_URL}
-      INFLUX_BUCKET: telemetry
-      INFLUX_ORG: myorg
       DOTNET_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:5000
       DOTNET_GCRetainVM: 1
@@ -101,10 +61,6 @@ services:
     ports:
       - "3000:3000"
     environment:
-      INFLUXDB_URL: ${INFLUXDB_URL}
-      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
-      INFLUXDB_ORG: myorg
-      INFLUXDB_BUCKET: telemetry
       NODE_ENV: production
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     networks:
@@ -159,8 +115,6 @@ services:
           memory: 1g
 
 volumes:
-  influxdb2-data:
-  influxdb2-config:
   rabbitmq-data:
   questdb-data:
 

@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,12 @@ import (
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/config"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
+
+var jsonBufferPool = sync.Pool{
+	New: func() interface{} {
+		return &bytes.Buffer{}
+	},
+}
 
 type ConnectionPool struct {
 	connections []*amqp.Connection
@@ -260,10 +267,15 @@ func (ps *PubSub) Exec(data []map[string]interface{}) error {
 		batchMessages = append(batchMessages, tick)
 	}
 
-	jsonData, err := json.Marshal(batchMessages)
+	buf := jsonBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer jsonBufferPool.Put(buf)
+
+	err := json.NewEncoder(buf).Encode(batchMessages)
 	if err != nil {
 		return fmt.Errorf("error marshaling batch to JSON: %w", err)
 	}
+	jsonData := buf.Bytes()
 
 	publishing := amqp.Publishing{
 		ContentType:  "application/json",
@@ -281,9 +293,7 @@ func (ps *PubSub) Exec(data []map[string]interface{}) error {
 	ps.batchSize += len(jsonData)
 	ps.totalMessages += int64(len(data))
 
-	if len(ps.messageBatch) >= ps.maxBatchSize {
-		ps.flushBatch()
-	}
+	ps.flushBatch()
 
 	ps.batchesLoaded++
 	return nil
@@ -295,18 +305,16 @@ func (ps *PubSub) flushBatch() {
 	}
 
 	ch := ps.pool.GetChannel()
+	batchSize := len(ps.messageBatch)
 
 	for _, msg := range ps.messageBatch {
-		if err := ch.Publish(
+		ch.Publish(
 			"telemetry_topic",
 			"telemetry.ticks",
 			false,
 			false,
 			msg,
-		); err != nil {
-			log.Printf("Worker %d: Failed to publish message: %v", ps.workerID, err)
-			break
-		}
+		)
 	}
 
 	ps.messageBatch = ps.messageBatch[:0]
@@ -314,10 +322,9 @@ func (ps *PubSub) flushBatch() {
 	ps.totalBatches++
 	ps.lastFlush = time.Now()
 
-	if ps.totalBatches%100 == 0 {
-		rate := float64(ps.totalMessages) / time.Since(ps.lastFlush).Seconds()
-		log.Printf("Worker %d: Published %d messages in %d batches (%.0f msg/sec)",
-			ps.workerID, ps.totalMessages, ps.totalBatches, rate)
+	if ps.totalBatches%50 == 0 {
+		log.Printf("Worker %d: Published batch %d (%d messages, %d/batch)",
+			ps.workerID, ps.totalBatches, ps.totalMessages, batchSize)
 	}
 }
 
