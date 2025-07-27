@@ -58,7 +58,6 @@ internal class Program
             .ConfigureServices((_, services) =>
             {
                 services.AddSingleton<Telemetry>();
-                services.AddSingleton<InfluxService>();
                 services.AddSingleton<Subscriber>();
             });
     }

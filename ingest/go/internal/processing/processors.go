@@ -9,7 +9,7 @@ import (
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/config"
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/messaging"
 	"github.com/OJPARKINSON/ibt"
-	"github.com/teamjorge/ibt/headers"
+	"github.com/OJPARKINSON/ibt/headers"
 )
 
 type loaderProcessor struct {
@@ -108,11 +108,7 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 			l.workerID, l.metrics.totalProcessed, len(l.cache))
 	}
 
-	enrichedInput := l.bufferPool.Get().(map[string]interface{})
-
-	for k := range enrichedInput {
-		delete(enrichedInput, k)
-	}
+	enrichedInput := make(map[string]interface{}, len(input)+5)
 
 	for k, v := range input {
 		enrichedInput[k] = v
@@ -133,7 +129,8 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 
 	l.mu.Lock()
 
-	shouldFlush := len(l.cache) >= 500 || l.currentBytes+estimatedSize > l.thresholdBytes
+	// PERFORMANCE OPTIMIZATION: Larger batch size for better throughput
+	shouldFlush := len(l.cache) >= 2000 || l.currentBytes+estimatedSize > l.thresholdBytes
 	if shouldFlush && len(l.cache) > 0 {
 		if l.metrics.totalBatches%100 == 0 {
 			log.Printf("Worker %d: Flushing batch at %d records",
@@ -141,11 +138,15 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 		}
 		if err := l.loadBatch(); err != nil {
 			l.mu.Unlock()
-			l.bufferPool.Put(enrichedInput)
+			// No need to put back since we're using new maps
 			return fmt.Errorf("failed to load batch: %w", err)
 		}
 	}
 
+	// PERFORMANCE OPTIMIZATION: Pre-allocate cache capacity to reduce slice growth
+	if cap(l.cache) == 0 {
+		l.cache = make([]map[string]interface{}, 0, 2000)
+	}
 	l.cache = append(l.cache, enrichedInput)
 	l.currentBytes += estimatedSize
 
