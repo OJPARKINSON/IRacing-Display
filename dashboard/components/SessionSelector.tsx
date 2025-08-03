@@ -6,6 +6,7 @@ import { useState } from "react";
 interface Session {
 	session_id: string;
 	last_updated: Date;
+	track_name: string;
 }
 
 interface SessionSelectorProps {
@@ -32,6 +33,8 @@ export default function SessionSelector({ sessions }: SessionSelectorProps) {
 		}).format(new Date(date));
 	};
 
+	console.log(sessions)
+
 	return (
 		<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 			<div>
@@ -55,7 +58,7 @@ export default function SessionSelector({ sessions }: SessionSelectorProps) {
 					</option>
 					{sessions.map((session) => (
 						<option key={session.session_id} value={session.session_id}>
-							{session.session_id} - {formatDate(session.last_updated)}
+							{session.session_id} - {formatDate(session.last_updated)} - {session.track_name}
 						</option>
 					))}
 				</select>

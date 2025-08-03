@@ -167,12 +167,12 @@ class QuestDBClient {
 		try {
 			return await this.executeWithRetry(async (client) => {
 				const query = `
-                    SELECT DISTINCT session_id, 
-                           MAX(timestamp) as last_updated
-                    FROM TelemetryTicks 
-                    GROUP BY session_id 
-                    ORDER BY last_updated DESC
-                    LIMIT 50
+				SELECT DISTINCT session_id, 
+				track_name,
+				MAX(timestamp) as last_updated
+				FROM TelemetryTicks 
+				ORDER BY last_updated DESC
+				LIMIT 50
                 `;
 
 				const result = await client.query(query);
@@ -180,6 +180,7 @@ class QuestDBClient {
 				const sessions = result.rows.map((row) => ({
 					session_id: row.session_id,
 					last_updated: new Date(row.last_updated),
+					track_name: row.track_name,
 				}));
 
 				console.log(`Found ${sessions.length} sessions`);
