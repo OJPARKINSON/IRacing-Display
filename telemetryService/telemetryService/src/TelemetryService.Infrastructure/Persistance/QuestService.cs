@@ -121,6 +121,8 @@ public class QuestDbService
                     
                     .Symbol("lap_id", tel.Lap_id ?? "unknown")
                     .Symbol("session_num", tel.Session_num)
+                    .Symbol("session_type", tel.Session_type ?? "Unknown")
+                    .Symbol("session_name", tel.Session_name ?? "Unknown")
                     
                     .Column("car_id", tel.Car_id)
                     

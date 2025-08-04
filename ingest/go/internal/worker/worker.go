@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -53,13 +54,43 @@ func (wp *WorkerPool) processWorkItem(ctx context.Context, workerID int, item Wo
 	}
 	defer processor.Close()
 
-	result, err := processor.ProcessFile(ctx, item.FilePath, item.FileInfo)
-	if err != nil {
+	// Create timeout context for file processing
+	processCtx, processCancel := context.WithTimeout(ctx, wp.config.FileProcessTimeout)
+	defer processCancel()
+
+	// Channel to receive the result or timeout
+	resultChan := make(chan struct {
+		result *processing.ProcessResult
+		err    error
+	}, 1)
+
+	// Process file in goroutine to enable timeout
+	go func() {
+		result, err := processor.ProcessFile(processCtx, item.FilePath, item.FileInfo)
+		resultChan <- struct {
+			result *processing.ProcessResult
+			err    error
+		}{result, err}
+	}()
+
+	// Wait for result or timeout
+	var result *processing.ProcessResult
+	var processErr error
+	select {
+	case res := <-resultChan:
+		result = res.result
+		processErr = res.err
+	case <-processCtx.Done():
+		processErr = fmt.Errorf("file processing timeout after %v", wp.config.FileProcessTimeout)
+		log.Printf("Worker %d: File processing timeout for %s", workerID, filename)
+	}
+
+	if processErr != nil {
 		wp.UpdateWorkerStatus(workerID, filename, "ERROR")
 		wp.errorsChan <- WorkError{
 			FilePath:  item.FilePath,
-			Error:     err,
-			Retry:     shouldRetry(err, item.RetryCount),
+			Error:     processErr,
+			Retry:     shouldRetry(processErr, item.RetryCount),
 			WorkerID:  workerID,
 			Timestamp: time.Now(),
 		}

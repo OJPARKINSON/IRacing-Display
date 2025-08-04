@@ -202,6 +202,8 @@ public class QuestDbSchemaManager
                 track_id SYMBOL CAPACITY 100 INDEX,
                 lap_id SYMBOL CAPACITY 500,
                 session_num SYMBOL CAPACITY 20,
+                session_type SYMBOL CAPACITY 10,
+                session_name SYMBOL CAPACITY 50,
                 car_id VARCHAR,
                 gear INT,
                 player_car_position LONG,
@@ -273,6 +275,8 @@ public class QuestDbSchemaManager
                     track_id,
                     lap_id,
                     session_num,
+                    COALESCE(session_type, 'Unknown') as session_type,
+                    COALESCE(session_name, 'Unknown') as session_name,
                     car_id,
                     CASE 
                         WHEN gear = '1' THEN 1

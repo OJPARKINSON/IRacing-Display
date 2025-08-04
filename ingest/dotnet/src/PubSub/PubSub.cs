@@ -31,15 +31,17 @@ class BufferedPubSub : IDisposable
     public BufferedPubSub(
         int maxBatchSize = 1000,
         int maxBatchBytes = 250000,
-        TimeSpan? flushInterval = null)
+        TimeSpan? flushInterval = null
+    )
     {
         _maxBatchSize = maxBatchSize;
         _maxBatchBytes = maxBatchBytes;
         _flushInterval = flushInterval ?? TimeSpan.FromMilliseconds(50);
 
         _flushTimer = new Timer(FlushTimerCallback, null, _flushInterval, _flushInterval);
-        
-        Console.WriteLine($"BufferedPubSub initialized: maxBatch={_maxBatchSize}, maxBytes={_maxBatchBytes}, flushInterval={_flushInterval.TotalMilliseconds}ms");
+
+        Console.WriteLine(
+            $"BufferedPubSub initialized: maxBatch={_maxBatchSize}, maxBytes={_maxBatchBytes}, flushInterval={_flushInterval.TotalMilliseconds}ms");
     }
 
     public async Task InitializeAsync()
@@ -70,9 +72,10 @@ class BufferedPubSub : IDisposable
         }
     }
 
-    public async void Publish(ILogger logger, TelemetryData data, string trackName = "", string trackId = "", int sessionId = 0)
+    public async void Publish(ILogger logger, TelemetryData data, string trackName = "", string trackId = "",
+        int sessionId = 0)
     {
-        if (_disposed || _cancellationTokenSource.Token.IsCancellationRequested) 
+        if (_disposed || _cancellationTokenSource.Token.IsCancellationRequested)
         {
             logger.LogWarning("Publish called after disposal or cancellation");
             return;
@@ -150,7 +153,7 @@ class BufferedPubSub : IDisposable
         if (_disposed || _cancellationTokenSource.Token.IsCancellationRequested) return;
 
         bool shouldFlush = false;
-        
+
         lock (_lockObject)
         {
             if (_disposed) return;
@@ -160,10 +163,11 @@ class BufferedPubSub : IDisposable
             _totalPointsBuffered++;
 
             shouldFlush = _buffer.Count >= _maxBatchSize || _currentBufferBytes >= _maxBatchBytes;
-            
+
             if (_buffer.Count % 500 == 0)
             {
-                Console.WriteLine($"Buffer status: {_buffer.Count}/{_maxBatchSize} points, {_currentBufferBytes}/{_maxBatchBytes} bytes");
+                Console.WriteLine(
+                    $"Buffer status: {_buffer.Count}/{_maxBatchSize} points, {_currentBufferBytes}/{_maxBatchBytes} bytes");
             }
         }
 
@@ -223,7 +227,8 @@ class BufferedPubSub : IDisposable
                 if (elapsed.TotalSeconds > 0)
                 {
                     var rate = _totalPointsBuffered / elapsed.TotalSeconds;
-                    Console.WriteLine($"Flush metrics: {_totalPointsBuffered} points in {_totalBatchesSent} batches ({rate:F0} points/sec)");
+                    Console.WriteLine(
+                        $"Flush metrics: {_totalPointsBuffered} points in {_totalBatchesSent} batches ({rate:F0} points/sec)");
                 }
             }
         }
@@ -281,7 +286,7 @@ class BufferedPubSub : IDisposable
     public async Task ForceFlush(int sessionId = 1)
     {
         if (_disposed) return;
-        
+
         Console.WriteLine("Force flushing remaining data...");
         await FlushBuffer(sessionId);
         Console.WriteLine("Force flush completed");
@@ -290,13 +295,13 @@ class BufferedPubSub : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        
+
         _disposed = true;
-        
+
         Console.WriteLine("Starting BufferedPubSub disposal...");
-        
+
         _cancellationTokenSource.Cancel();
-        
+
         try
         {
             _flushTimer?.Dispose();
@@ -306,7 +311,7 @@ class BufferedPubSub : IDisposable
         {
             Console.WriteLine($"Error disposing timer: {ex.Message}");
         }
-        
+
         try
         {
             var flushTask = ForceFlush();
@@ -323,7 +328,7 @@ class BufferedPubSub : IDisposable
         {
             Console.WriteLine($"Error during final flush: {ex.Message}");
         }
-        
+
         lock (_lockObject)
         {
             try
@@ -336,7 +341,7 @@ class BufferedPubSub : IDisposable
             {
                 Console.WriteLine($"Error disposing channel: {ex.Message}");
             }
-            
+
             try
             {
                 _connection?.CloseAsync().Wait(TimeSpan.FromSeconds(2));
@@ -347,10 +352,10 @@ class BufferedPubSub : IDisposable
             {
                 Console.WriteLine($"Error disposing connection: {ex.Message}");
             }
-            
+
             _isConnected = false;
         }
-        
+
         try
         {
             _cancellationTokenSource.Dispose();
@@ -359,7 +364,8 @@ class BufferedPubSub : IDisposable
         {
             Console.WriteLine($"Error disposing cancellation token source: {ex.Message}");
         }
-        
-        Console.WriteLine($"BufferedPubSub disposed. Final stats: {_totalPointsBuffered} points, {_totalBatchesSent} batches");
+
+        Console.WriteLine(
+            $"BufferedPubSub disposed. Final stats: {_totalPointsBuffered} points, {_totalBatchesSent} batches");
     }
 }

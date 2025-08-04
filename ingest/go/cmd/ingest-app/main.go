@@ -54,7 +54,7 @@ func main() {
 
 	pool := worker.NewWorkerPool(cfg)
 
-	expectedFiles, err := discoverAndQueueFiles(ctx, pool, telemetryFolder)
+	expectedFiles, err := discoverAndQueueFiles(ctx, pool, telemetryFolder, cfg)
 	if err != nil {
 		log.Printf("Error during file discovery: %v", err)
 		return
@@ -79,8 +79,8 @@ func main() {
 	time.Sleep(2 * time.Second)
 }
 
-func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemetryFolder string) (int, error) {
-	directory := processing.NewDir(telemetryFolder)
+func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemetryFolder string, cfg *config.Config) (int, error) {
+	directory := processing.NewDir(telemetryFolder, cfg)
 	files := directory.WatchDir()
 
 	filesQueued := 0

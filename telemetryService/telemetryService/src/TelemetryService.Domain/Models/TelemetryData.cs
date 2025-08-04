@@ -49,6 +49,12 @@ public class TelemetryData
     [JsonPropertyName("session_num")]
     public string? Session_num { get; set; }
 
+    [JsonPropertyName("session_type")]
+    public string? Session_type { get; set; }
+
+    [JsonPropertyName("session_name")]
+    public string? Session_name { get; set; }
+
     [JsonPropertyName("session_time")]
     public double Session_time { get; set; }
 

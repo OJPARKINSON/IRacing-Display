@@ -72,8 +72,18 @@ func (p *ConnectionPool) GetChannel() *amqp.Channel {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	if p.channels == nil || len(p.channels) == 0 {
+		return nil
+	}
+
 	ch := p.channels[p.current]
 	p.current = (p.current + 1) % p.poolSize
+
+	// Check if channel is still open
+	if ch == nil || ch.IsClosed() {
+		log.Printf("Channel %d is closed, attempting to recreate", p.current-1)
+		return nil
+	}
 
 	return ch
 }
@@ -199,6 +209,16 @@ func (ps *PubSub) Exec(data []map[string]interface{}) error {
 			sessionNum = fmt.Sprintf("%v", val)
 		}
 
+		sessionType := ""
+		if val, ok := record["sessionType"]; ok {
+			sessionType = fmt.Sprintf("%v", val)
+		}
+
+		sessionName := ""
+		if val, ok := record["sessionName"]; ok {
+			sessionName = fmt.Sprintf("%v", val)
+		}
+
 		trackName := ""
 		if val, ok := record["trackDisplayShortName"]; ok {
 			trackName = fmt.Sprintf("%v", val)
@@ -223,6 +243,8 @@ func (ps *PubSub) Exec(data []map[string]interface{}) error {
 			"lap_dist_pct":         getFloatValue(record, "LapDistPct"),
 			"session_id":           ps.sessionID,
 			"session_num":          sessionNum,
+			"session_type":         sessionType,
+			"session_name":         sessionName,
 			"session_time":         sessionTime,
 			"car_id":               carID,
 			"track_name":           trackName,
@@ -304,28 +326,67 @@ func (ps *PubSub) flushBatch() {
 		return
 	}
 
-	ch := ps.pool.GetChannel()
+	maxRetries := 3
 	batchSize := len(ps.messageBatch)
+	
+	for retry := 0; retry < maxRetries; retry++ {
+		ch := ps.pool.GetChannel()
+		if ch == nil {
+			log.Printf("Worker %d: Failed to get channel from pool (attempt %d/%d)", ps.workerID, retry+1, maxRetries)
+			if retry < maxRetries-1 {
+				time.Sleep(time.Duration(retry+1) * 100 * time.Millisecond)
+				continue
+			}
+			return
+		}
 
-	for _, msg := range ps.messageBatch {
-		ch.Publish(
-			"telemetry_topic",
-			"telemetry.ticks",
-			false,
-			false,
-			msg,
-		)
+		publishedCount := 0
+		// Create a context with timeout for publishing
+		ctx, cancel := context.WithTimeout(ps.ctx, 10*time.Second)
+
+		publishSuccess := true
+		for _, msg := range ps.messageBatch {
+			err := ch.PublishWithContext(
+				ctx,
+				"telemetry_topic",
+				"telemetry.ticks",
+				false,
+				false,
+				msg,
+			)
+			if err != nil {
+				log.Printf("Worker %d: Failed to publish message (attempt %d/%d): %v", ps.workerID, retry+1, maxRetries, err)
+				publishSuccess = false
+				break
+			}
+			publishedCount++
+		}
+		cancel()
+
+		if publishSuccess {
+			ps.messageBatch = ps.messageBatch[:0]
+			ps.batchSize = 0
+			ps.totalBatches++
+			ps.lastFlush = time.Now()
+
+			if ps.totalBatches%50 == 0 {
+				log.Printf("Worker %d: Published batch %d (%d messages, %d/batch)",
+					ps.workerID, ps.totalBatches, publishedCount, batchSize)
+			}
+			return
+		}
+
+		// If we failed, wait before retrying
+		if retry < maxRetries-1 {
+			time.Sleep(time.Duration(retry+1) * 250 * time.Millisecond)
+		}
 	}
 
+	// If we get here, all retries failed
+	log.Printf("Worker %d: Failed to publish batch after %d retries, dropping %d messages", 
+		ps.workerID, maxRetries, batchSize)
 	ps.messageBatch = ps.messageBatch[:0]
 	ps.batchSize = 0
-	ps.totalBatches++
-	ps.lastFlush = time.Now()
-
-	if ps.totalBatches%50 == 0 {
-		log.Printf("Worker %d: Published batch %d (%d messages, %d/batch)",
-			ps.workerID, ps.totalBatches, ps.totalMessages, batchSize)
-	}
 }
 
 func (ps *PubSub) Close() error {
