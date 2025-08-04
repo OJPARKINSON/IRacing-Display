@@ -9,7 +9,7 @@ import (
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/config"
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/messaging"
 	"github.com/OJPARKINSON/ibt"
-	"github.com/OJPARKINSON/ibt/headers"
+	"github.com/teamjorge/ibt/headers"
 )
 
 type loaderProcessor struct {
@@ -27,11 +27,17 @@ type loaderProcessor struct {
 	bufferPool     *sync.Pool
 	config         *config.Config
 
-	// Pre-allocated session info to avoid per-tick lookups
-	sessionID      int
+	// Session info mapping for all available sessions
+	sessionMap     map[int]sessionInfo // Maps SessionNum to session details
 	trackName      string
 	trackID        int
 	sessionInfoSet bool
+}
+
+type sessionInfo struct {
+	sessionNum  int
+	sessionType string
+	sessionName string
 }
 
 type processorMetrics struct {
@@ -52,6 +58,7 @@ func NewLoaderProcessor(pubSub *messaging.PubSub, groupNumber int, config *confi
 		workerID:       workerID,
 		lastFlush:      time.Now(),
 		currentBytes:   0,
+		sessionMap:     make(map[int]sessionInfo),
 		metrics: processorMetrics{
 			processingStarted: time.Now(),
 		},
@@ -91,16 +98,22 @@ func (l *loaderProcessor) Whitelist() []string {
 }
 
 func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers.Session) error {
-	// Set session info once on first call instead of every tick
+	// Build session map once on first call instead of every tick
 	if !l.sessionInfoSet && session != nil && len(session.SessionInfo.Sessions) > 0 {
-		sessionIndex := 0
-		if len(session.SessionInfo.Sessions) > 2 {
-			sessionIndex = 2
+		// Map all available sessions by their SessionNum
+		for _, sess := range session.SessionInfo.Sessions {
+			l.sessionMap[sess.SessionNum] = sessionInfo{
+				sessionNum:  sess.SessionNum,
+				sessionType: sess.SessionType,
+				sessionName: sess.SessionName,
+			}
 		}
-		l.sessionID = session.SessionInfo.Sessions[sessionIndex].SessionNum
 		l.trackName = session.WeekendInfo.TrackDisplayShortName
 		l.trackID = session.WeekendInfo.TrackID
 		l.sessionInfoSet = true
+		
+		log.Printf("Worker %d: Mapped %d sessions for track %s", 
+			l.workerID, len(l.sessionMap), l.trackName)
 	}
 
 	if l.metrics.totalProcessed%50000 == 0 {
@@ -108,8 +121,8 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 			l.workerID, l.metrics.totalProcessed, len(l.cache))
 	}
 
-	enrichedInput := make(map[string]interface{}, len(input)+5)
-
+	enrichedInput := l.bufferPool.Get().(map[string]interface{})
+	
 	for k, v := range input {
 		enrichedInput[k] = v
 	}
@@ -118,19 +131,51 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 	enrichedInput["workerID"] = l.workerID
 
 	if l.sessionInfoSet {
-		enrichedInput["sessionID"] = l.sessionID
 		enrichedInput["trackDisplayShortName"] = l.trackName
 		enrichedInput["trackID"] = l.trackID
+		
+		// Use the actual SessionNum from telemetry data to get session info  
+		if sessionNumVal, ok := input["SessionNum"]; ok {
+			if sessionNum, ok := sessionNumVal.(int); ok {
+				if sessionInfo, exists := l.sessionMap[sessionNum]; exists {
+					enrichedInput["sessionID"] = sessionInfo.sessionNum
+					enrichedInput["sessionType"] = sessionInfo.sessionType
+					enrichedInput["sessionName"] = sessionInfo.sessionName
+				} else {
+					// Fallback if session not found in map
+					enrichedInput["sessionID"] = sessionNum
+					enrichedInput["sessionType"] = "Unknown"
+					enrichedInput["sessionName"] = "Unknown"
+				}
+			} else {
+				// Fallback if conversion fails
+				enrichedInput["sessionID"] = 0
+				enrichedInput["sessionType"] = "Unknown"
+				enrichedInput["sessionName"] = "Unknown"
+			}
+		} else {
+			// Fallback if SessionNum not present
+			enrichedInput["sessionID"] = 0
+			enrichedInput["sessionType"] = "Unknown"
+			enrichedInput["sessionName"] = "Unknown"
+		}
 	} else {
 		enrichedInput["sessionID"] = 0
+		enrichedInput["sessionType"] = "Unknown"
+		enrichedInput["sessionName"] = "Unknown"
 	}
 
 	estimatedSize := len(input)*20 + 100 // Rough estimate
 
 	l.mu.Lock()
 
-	// PERFORMANCE OPTIMIZATION: Larger batch size for better throughput
-	shouldFlush := len(l.cache) >= 2000 || l.currentBytes+estimatedSize > l.thresholdBytes
+	// PERFORMANCE OPTIMIZATION: Dynamic batch size based on memory pressure
+	maxBatchSize := 2000
+	if l.currentBytes > l.thresholdBytes/2 {
+		maxBatchSize = 1000 // Reduce batch size when memory pressure is high
+	}
+	
+	shouldFlush := len(l.cache) >= maxBatchSize || l.currentBytes+estimatedSize > l.thresholdBytes
 	if shouldFlush && len(l.cache) > 0 {
 		if l.metrics.totalBatches%100 == 0 {
 			log.Printf("Worker %d: Flushing batch at %d records",
@@ -240,6 +285,10 @@ func (l *loaderProcessor) loadBatch() error {
 	}
 
 	for _, m := range l.cache {
+		// Clear the map before returning to pool to prevent memory leaks
+		for k := range m {
+			delete(m, k)
+		}
 		l.bufferPool.Put(m)
 	}
 

@@ -19,6 +19,9 @@ type Config struct {
 	RabbitMQURL     string
 	DisableRabbitMQ bool
 
+	FileAgeThreshold    time.Duration
+	FileProcessTimeout  time.Duration
+
 	GoMaxProcs int
 	GOGC       int
 
@@ -49,6 +52,9 @@ func LoadConfig() *Config {
 		RetryDelay:     getEnvAsDuration("RETRY_DELAY", 250*time.Millisecond),
 
 		RabbitMQURL: getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+
+		FileAgeThreshold:   getEnvAsDuration("FILE_AGE_THRESHOLD", 30*time.Second),
+		FileProcessTimeout: getEnvAsDuration("FILE_PROCESS_TIMEOUT", 10*time.Minute),
 
 		GoMaxProcs: getEnvAsInt("GOMAXPROCS", 0),
 		GOGC:       getEnvAsInt("GOGC", 50),

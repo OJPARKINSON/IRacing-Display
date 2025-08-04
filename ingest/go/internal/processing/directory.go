@@ -4,16 +4,20 @@ import (
 	"log"
 	"os"
 	"time"
+
+	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/config"
 )
 
 type Directory struct {
-	path     string
-	lastScan time.Time
+	path             string
+	lastScan         time.Time
+	fileAgeThreshold time.Duration
 }
 
-func NewDir(path string) *Directory {
+func NewDir(path string, cfg *config.Config) *Directory {
 	return &Directory{
-		path: path,
+		path:             path,
+		fileAgeThreshold: cfg.FileAgeThreshold,
 	}
 }
 
@@ -33,10 +37,10 @@ func (d *Directory) WatchDir() []os.DirEntry {
 			continue
 		}
 
-		if info.ModTime().Before(time.Now().Add(-(time.Minute * 5))) {
+		if info.ModTime().Before(time.Now().Add(-d.fileAgeThreshold)) {
 			filesToProcess = append(filesToProcess, file)
 		} else {
-			log.Printf("Skipping recent file (still being written?): %s", file.Name())
+			log.Printf("Skipping recent file (still being written? Age threshold: %v): %s", d.fileAgeThreshold, file.Name())
 		}
 	}
 
