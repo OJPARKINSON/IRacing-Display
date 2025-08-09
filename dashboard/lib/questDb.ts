@@ -146,9 +146,11 @@ class QuestDBClient {
 
 				const result = await client.query(query, [sessionId]);
 
-				const laps = result.rows.map((row) => ({
-					lap_id: Number.parseInt(row.lap_id, 10),
-				}));
+				const laps = result.rows
+					.map((row) => ({
+						lap_id: Number.parseInt(row.lap_id, 10),
+					}))
+					.sort(({ lap_id }, b) => lap_id -  b.lap_id);
 
 				console.log(`Found ${laps.length} laps for session ${sessionId}`);
 				return laps;

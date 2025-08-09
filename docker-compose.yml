@@ -5,8 +5,10 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+      - "15692:15692"
     volumes:
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - ./enabled_plugins:/etc/rabbitmq/enabled_plugins
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
       test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
@@ -82,8 +84,11 @@ services:
     ports:
       - "9000:9000"
       - "8812:8812"
+      - "9003:9003"
     volumes:
       - questdb-data:/root/.questdb
+    environment:
+      - QDB_METRICS_ENABLED=true
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

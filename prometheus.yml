@@ -12,12 +12,13 @@ scrape_configs:
       - targets: ['node-exporter:9100']
     scrape_interval: 5s
 
-  - job_name: 'rabbitmq'
+  - job_name: 'rabbitmq-metrics'
     static_configs:
-      - targets: ['rabbitmq:15672']  # RabbitMQ management port
-    scrape_interval: 30s
+      - targets: ['rabbitmq:15692']  # RabbitMQ Prometheus metrics port
+    scrape_interval: 15s
 
-  - job_name: 'questdb'
+  - job_name: 'questdb-metrics'
     static_configs:
-      - targets: ['questdb:9000']  # QuestDB web console port
-    scrape_interval: 30s
+      - targets: ['questdb:9003']  # QuestDB metrics port
+    scrape_interval: 15s
+
