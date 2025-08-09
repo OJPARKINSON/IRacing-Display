@@ -77,14 +77,12 @@ func (fp *FileProcessor) ProcessFile(ctx context.Context, telemetryFolder string
 	headers := stubs[0].Headers()
 	weekendInfo := headers.SessionInfo.WeekendInfo
 
-	if !fp.config.DisableRabbitMQ {
-		fp.pubSub = messaging.NewPubSub(
-			strconv.Itoa(weekendInfo.SubSessionID),
-			sessionTime,
-			fp.config,
-			fp.pool,
-		)
-	}
+	fp.pubSub = messaging.NewPubSub(
+		strconv.Itoa(weekendInfo.SubSessionID),
+		sessionTime,
+		fp.config,
+		fp.pool,
+	)
 
 	log.Printf("Worker %d: About to group telemetry data", fp.workerID)
 	groups := stubs.Group()

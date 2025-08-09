@@ -206,7 +206,7 @@ public class QuestDbSchemaManager
                 session_name SYMBOL CAPACITY 50,
                 car_id VARCHAR,
                 gear INT,
-                player_car_position LONG,
+                player_car_position DOUBLE,
                 speed DOUBLE,
                 lap_dist_pct DOUBLE,
                 session_time DOUBLE,

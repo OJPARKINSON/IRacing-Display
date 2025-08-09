@@ -27,8 +27,7 @@ type loaderProcessor struct {
 	bufferPool     *sync.Pool
 	config         *config.Config
 
-	// Session info mapping for all available sessions
-	sessionMap     map[int]sessionInfo // Maps SessionNum to session details
+	sessionMap     map[int]sessionInfo
 	trackName      string
 	trackID        int
 	sessionInfoSet bool
@@ -111,8 +110,8 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 		l.trackName = session.WeekendInfo.TrackDisplayShortName
 		l.trackID = session.WeekendInfo.TrackID
 		l.sessionInfoSet = true
-		
-		log.Printf("Worker %d: Mapped %d sessions for track %s", 
+
+		log.Printf("Worker %d: Mapped %d sessions for track %s",
 			l.workerID, len(l.sessionMap), l.trackName)
 	}
 
@@ -122,7 +121,7 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 	}
 
 	enrichedInput := l.bufferPool.Get().(map[string]interface{})
-	
+
 	for k, v := range input {
 		enrichedInput[k] = v
 	}
@@ -133,8 +132,8 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 	if l.sessionInfoSet {
 		enrichedInput["trackDisplayShortName"] = l.trackName
 		enrichedInput["trackID"] = l.trackID
-		
-		// Use the actual SessionNum from telemetry data to get session info  
+
+		// Use the actual SessionNum from telemetry data to get session info
 		if sessionNumVal, ok := input["SessionNum"]; ok {
 			if sessionNum, ok := sessionNumVal.(int); ok {
 				if sessionInfo, exists := l.sessionMap[sessionNum]; exists {
@@ -163,6 +162,8 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 		enrichedInput["sessionID"] = 0
 		enrichedInput["sessionType"] = "Unknown"
 		enrichedInput["sessionName"] = "Unknown"
+		enrichedInput["trackDisplayShortName"] = ""
+		enrichedInput["trackID"] = 0
 	}
 
 	estimatedSize := len(input)*20 + 100 // Rough estimate
@@ -174,7 +175,7 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 	if l.currentBytes > l.thresholdBytes/2 {
 		maxBatchSize = 1000 // Reduce batch size when memory pressure is high
 	}
-	
+
 	shouldFlush := len(l.cache) >= maxBatchSize || l.currentBytes+estimatedSize > l.thresholdBytes
 	if shouldFlush && len(l.cache) > 0 {
 		if l.metrics.totalBatches%100 == 0 {
@@ -285,7 +286,6 @@ func (l *loaderProcessor) loadBatch() error {
 	}
 
 	for _, m := range l.cache {
-		// Clear the map before returning to pool to prevent memory leaks
 		for k := range m {
 			delete(m, k)
 		}

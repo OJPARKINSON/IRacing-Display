@@ -42,11 +42,6 @@ func main() {
 	}
 
 	telemetryFolder := os.Args[1]
-	testMode := len(os.Args) > 2 && os.Args[2] == "--test-mode"
-
-	if testMode {
-		cfg.DisableRabbitMQ = true
-	}
 
 	if !strings.HasSuffix(telemetryFolder, string(filepath.Separator)) {
 		telemetryFolder += string(filepath.Separator)
@@ -120,7 +115,7 @@ func waitForCompletion(ctx context.Context, pool *worker.WorkerPool, startTime t
 			progress.AddLog("Shutdown requested...")
 			return
 		default:
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(20 * time.Millisecond)
 			metrics := pool.GetMetrics()
 
 			if metrics.QueueDepth == 0 && metrics.TotalFilesProcessed >= expectedFiles {

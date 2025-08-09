@@ -19,8 +19,8 @@ type Config struct {
 	RabbitMQURL     string
 	DisableRabbitMQ bool
 
-	FileAgeThreshold    time.Duration
-	FileProcessTimeout  time.Duration
+	FileAgeThreshold   time.Duration
+	FileProcessTimeout time.Duration
 
 	GoMaxProcs int
 	GOGC       int
@@ -38,6 +38,8 @@ type Config struct {
 	RabbitMQHeartbeat     time.Duration
 	RabbitMQChannelMax    int
 	RabbitMQFrameSize     int
+
+	BatchSizeRecords int
 }
 
 func LoadConfig() *Config {
@@ -72,6 +74,8 @@ func LoadConfig() *Config {
 		RabbitMQHeartbeat:     getEnvAsDuration("RABBITMQ_HEARTBEAT", 30*time.Second),
 		RabbitMQChannelMax:    getEnvAsInt("RABBITMQ_CHANNEL_MAX", 4096),
 		RabbitMQFrameSize:     getEnvAsInt("RABBITMQ_FRAME_SIZE", 1048576),
+
+		BatchSizeRecords: getEnvAsInt("BATCH_SIZE_RECORDS", 1000),
 	}
 }
 

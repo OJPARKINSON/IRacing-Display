@@ -40,7 +40,9 @@ func (wp *WorkerPool) processWorkItem(ctx context.Context, workerID int, item Wo
 
 	log.Printf("Worker %d processing file: %s (retry %d)", workerID, item.FilePath, item.RetryCount)
 
+	// Create file processor (now includes optimized batching by default)
 	processor, err := processing.NewFileProcessor(wp.config, workerID, wp.rabbitPool)
+
 	if err != nil {
 		wp.UpdateWorkerStatus(workerID, filename, "ERROR")
 		wp.errorsChan <- WorkError{

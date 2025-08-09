@@ -1,4 +1,3 @@
-using TelemetryService.Application.Services;
 using TelemetryService.Infrastructure.Configuration;
 using TelemetryService.Infrastructure.Persistence;
 using TelemetryService.Infrastructure.Messaging;
@@ -27,11 +26,9 @@ builder.Services.AddCors(options =>
 });
 
 // Register telemetry services
-builder.Services.AddSingleton<Telemetry>();
 builder.Services.AddSingleton<QuestDbService>();
 builder.Services.AddSingleton<Subscriber>();
 
-// Add background service for RabbitMQ processing
 builder.Services.AddHostedService<TelemetryBackgroundService>();
 
 builder.Logging.ClearProviders();
