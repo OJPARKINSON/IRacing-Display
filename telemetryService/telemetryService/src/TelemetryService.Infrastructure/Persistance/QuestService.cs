@@ -114,6 +114,7 @@ public class QuestDbService
         {
             foreach (var tel in telData.Records)
             {
+
                 _sender.Table("TelemetryTicks")
                     .Symbol("session_id", tel.SessionId)
                     .Symbol("track_name", tel.TrackName)
@@ -127,7 +128,7 @@ public class QuestDbService
                     .Column("car_id", tel.CarId)
                     
                     .Column("gear", tel.Gear)
-                    .Column("player_car_position", tel.PlayerCarPosition)
+                    .Column("player_car_position", Math.Floor(tel.PlayerCarPosition))
                     
                     .Column("speed", tel.Speed)
                     .Column("lap_dist_pct", tel.LapDistPct)
