@@ -2,6 +2,7 @@ using TelemetryService.Infrastructure.Configuration;
 using TelemetryService.Infrastructure.Persistence;
 using TelemetryService.Infrastructure.Messaging;
 using TelemetryService.API.BackgroundServices; // Reference to your BackgroundService
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -48,13 +49,20 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+
+// Enable Prometheus metrics
+app.UseHttpMetrics();
+app.UseRouting();
+
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
+app.MapMetrics(); // Expose metrics at /metrics endpoint
 
 Console.WriteLine("🚀 Telemetry Service starting...");
 Console.WriteLine("✅ HTTP API endpoints enabled");
 Console.WriteLine("✅ Background RabbitMQ processing enabled");
+Console.WriteLine("✅ Prometheus metrics endpoint enabled at /metrics");
 Console.WriteLine($"Environment: {app.Environment.EnvironmentName}");
 
 app.Run();
