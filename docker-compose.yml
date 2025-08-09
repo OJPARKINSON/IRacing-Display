@@ -114,9 +114,102 @@ services:
           cpus: 0.5
           memory: 1g
 
+  node-exporter:
+    image: prom/node-exporter:v1.6.1
+    container_name: node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - telemetry-network
+
+  prometheus:
+    image: prom/prometheus:v2.47.2
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - telemetry-network
+
+  loki:
+    image: grafana/loki:2.9.8
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+      - ./loki-config.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - telemetry-network
+
+  alloy:
+    image: grafana/alloy:v1.4.2
+    container_name: grafana-alloy
+    restart: unless-stopped
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    networks:
+      - telemetry-network
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:10.4.8
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./grafana-dashboards:/etc/grafana/provisioning/dashboards/files:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - telemetry-network
+    user: "472:472"
+
 volumes:
   rabbitmq-data:
   questdb-data:
+  prometheus-data:
+  loki-data:
+  grafana-data:
+  alloy-data:
 
 
 networks:

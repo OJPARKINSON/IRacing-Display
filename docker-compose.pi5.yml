@@ -129,29 +129,6 @@ services:
           memory: 512M
     shm_size: 256m
 
-  pi-monitor:
-    image: prom/node-exporter:latest
-    container_name: pi-monitor
-    restart: unless-stopped
-    ports:
-      - "9100:9100"
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro
-    command:
-      - '--path.procfs=/host/proc'
-      - '--path.rootfs=/rootfs'
-      - '--path.sysfs=/host/sys'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-    networks:
-      - telemetry-network
-    deploy:
-      resources:
-        limits:
-          cpus: "0.1"
-          memory: 64M
-
 volumes:
   rabbitmq-data:
   questdb-data:
