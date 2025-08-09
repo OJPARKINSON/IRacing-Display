@@ -128,7 +128,7 @@ public class QuestDbService
                     .Column("car_id", tel.CarId)
                     
                     .Column("gear", tel.Gear)
-                    .Column("player_car_position", Math.Floor(tel.PlayerCarPosition))
+                    .Column("player_car_position", (long)Math.Floor(tel.PlayerCarPosition))
                     
                     .Column("speed", tel.Speed)
                     .Column("lap_dist_pct", tel.LapDistPct)
