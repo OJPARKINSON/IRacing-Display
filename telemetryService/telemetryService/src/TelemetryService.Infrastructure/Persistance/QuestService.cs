@@ -96,9 +96,9 @@ public class QuestDbService
         _schemaManager?.Dispose();
     }
 
-    public async Task WriteTick(List<TelemetryData>? telData)
+    public async Task WriteBatch(TelemetryBatch? telData)
     {
-        if (telData == null || telData.Count == 0)
+        if (telData == null)
         {
             Console.WriteLine("No telemetry data to write");
             return;
@@ -112,48 +112,48 @@ public class QuestDbService
 
         try
         {
-            foreach (var tel in telData)
+            foreach (var tel in telData.Records)
             {
                 _sender.Table("TelemetryTicks")
-                    .Symbol("session_id", tel.Session_id)
-                    .Symbol("track_name", tel.Track_name)
-                    .Symbol("track_id", tel.Track_id)
+                    .Symbol("session_id", tel.SessionId)
+                    .Symbol("track_name", tel.TrackName)
+                    .Symbol("track_id", tel.TrackId)
                     
-                    .Symbol("lap_id", tel.Lap_id ?? "unknown")
-                    .Symbol("session_num", tel.Session_num)
-                    .Symbol("session_type", tel.Session_type ?? "Unknown")
-                    .Symbol("session_name", tel.Session_name ?? "Unknown")
+                    .Symbol("lap_id", tel.LapId ?? "unknown")
+                    .Symbol("session_num", tel.SessionNum)
+                    .Symbol("session_type", tel.SessionType ?? "Unknown")
+                    .Symbol("session_name", tel.SessionName ?? "Unknown")
                     
-                    .Column("car_id", tel.Car_id)
+                    .Column("car_id", tel.CarId)
                     
                     .Column("gear", tel.Gear)
-                    .Column("player_car_position", tel.Player_car_position)
+                    .Column("player_car_position", tel.PlayerCarPosition)
                     
                     .Column("speed", tel.Speed)
-                    .Column("lap_dist_pct", tel.Lap_dist_pct)
-                    .Column("session_time", tel.Session_time)
+                    .Column("lap_dist_pct", tel.LapDistPct)
+                    .Column("session_time", tel.SessionTime)
                     .Column("lat", tel.Lat)
                     .Column("lon", tel.Lon)
-                    .Column("lap_current_lap_time", tel.Lap_current_lap_time)
+                    .Column("lap_current_lap_time", tel.LapCurrentLapTime)
                     .Column("lapLastLapTime", tel.LapLastLapTime)
                     .Column("lapDeltaToBestLap", tel.LapDeltaToBestLap)
                     
                     .Column("throttle", (float)tel.Throttle)
                     .Column("brake", (float)tel.Brake)
-                    .Column("steering_wheel_angle", (float)tel.Steering_wheel_angle)
+                    .Column("steering_wheel_angle", (float)tel.SteeringWheelAngle)
                     .Column("rpm", (float)tel.Rpm)
-                    .Column("velocity_x", (float)tel.Velocity_x)
-                    .Column("velocity_y", (float)tel.Velocity_y)
-                    .Column("velocity_z", (float)tel.Velocity_Z)
-                    .Column("fuel_level", (float)tel.Fuel_level)
+                    .Column("velocity_x", (float)tel.VelocityX)
+                    .Column("velocity_y", (float)tel.VelocityY)
+                    .Column("velocity_z", (float)tel.VelocityZ)
+                    .Column("fuel_level", (float)tel.FuelLevel)
                     .Column("alt", (float)tel.Alt)
-                    .Column("lat_accel", (float)tel.Lat_accel)
-                    .Column("long_accel", (float)tel.Long_accel)
-                    .Column("vert_accel", (float)tel.Vert_accel)
+                    .Column("lat_accel", (float)tel.LatAccel)
+                    .Column("long_accel", (float)tel.LongAccel)
+                    .Column("vert_accel", (float)tel.VertAccel)
                     .Column("pitch", (float)tel.Pitch)
                     .Column("roll", (float)tel.Roll)
                     .Column("yaw", (float)tel.Yaw)
-                    .Column("yaw_north", (float)tel.Yaw_north)
+                    .Column("yaw_north", (float)tel.YawNorth)
                     .Column("voltage", (float)tel.Voltage)
                     .Column("waterTemp", (float)tel.WaterTemp)
                     .Column("lFpressure", (float)tel.LFpressure)
@@ -164,11 +164,11 @@ public class QuestDbService
                     .Column("rFtempM", (float)tel.RFtempM)
                     .Column("lRtempM", (float)tel.LRtempM)
                     .Column("rRtempM", (float)tel.RRtempM)
-                    .At(DateTime.Parse(tel.Tick_time ?? DateTime.UtcNow.ToString("O")));
+                    .At(tel.TickTime.ToDateTime());
             }
             
             await _sender.SendAsync();
-            Console.WriteLine($"Successfully wrote {telData.Count} telemetry points");
+            Console.WriteLine($"Successfully wrote {telData.Records.Count} telemetry points");
         }
         catch (Exception ex)
         {

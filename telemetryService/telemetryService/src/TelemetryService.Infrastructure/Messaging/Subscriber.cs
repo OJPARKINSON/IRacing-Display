@@ -1,7 +1,6 @@
 using System.Text;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using TelemetryService.Application.Services;
 using TelemetryService.Domain.Models;
 using TelemetryService.Infrastructure.Persistence;
 
@@ -13,11 +12,9 @@ public class Subscriber
     private const int MaxRetryAttempts = 10;
     private const int RetryDelayMs = 5000;
     private readonly QuestDbService _questDbService;
-    private readonly Telemetry _telemetryService;
 
-    public Subscriber(Telemetry telemetryService, QuestDbService questDbService)
+    public Subscriber(QuestDbService questDbService)
     {
-        _telemetryService = telemetryService;
         _questDbService = questDbService;
     }
 
@@ -96,11 +93,9 @@ public class Subscriber
             try
             {
                 var body = ea.Body.ToArray();
-                var message = Encoding.UTF8.GetString(body);
-
-                List<TelemetryData> telemetryData = _telemetryService.Parse(message);
-
-                var questTask = _questDbService.WriteTick(telemetryData);
+                var message = TelemetryBatch.Parser.ParseFrom(body);
+                
+                var questTask = _questDbService.WriteBatch(message);
                 
                 await Task.WhenAll(questTask);
             }
