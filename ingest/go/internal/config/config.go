@@ -44,12 +44,12 @@ type Config struct {
 
 func LoadConfig() *Config {
 	return &Config{
-		WorkerCount:   getEnvAsInt("WORKER_COUNT", 20),
-		FileQueueSize: getEnvAsInt("FILE_QUEUE_SIZE", 100),
+		WorkerCount:   getEnvAsInt("WORKER_COUNT", 24),
+		FileQueueSize: getEnvAsInt("FILE_QUEUE_SIZE", 500),
 		WorkerTimeout: getEnvAsDuration("WORKER_TIMEOUT", 30*time.Minute),
 
-		BatchSizeBytes: getEnvAsInt("BATCH_SIZE_BYTES", 1048576),
-		BatchTimeout:   getEnvAsDuration("BATCH_TIMEOUT", 2*time.Second),
+		BatchSizeBytes: getEnvAsInt("BATCH_SIZE_BYTES", 4194304),
+		BatchTimeout:   getEnvAsDuration("BATCH_TIMEOUT", 500*time.Millisecond),
 		MaxRetries:     getEnvAsInt("MAX_RETRIES", 3),
 		RetryDelay:     getEnvAsDuration("RETRY_DELAY", 250*time.Millisecond),
 
@@ -65,17 +65,17 @@ func LoadConfig() *Config {
 		PprofPort:    getEnv("PPROF_PORT", "6060"),
 		MemoryTuning: getEnvAsBool("MEMORY_TUNING", true),
 
-		RabbitMQPoolSize:      getEnvAsInt("RABBITMQ_POOL_SIZE", 8),
-		RabbitMQPrefetchCount: getEnvAsInt("RABBITMQ_PREFETCH_COUNT", 2000),
-		RabbitMQBatchSize:     getEnvAsInt("RABBITMQ_BATCH_SIZE", 200),
-		RabbitMQBatchTimeout:  getEnvAsDuration("RABBITMQ_BATCH_TIMEOUT", 25*time.Millisecond),
+		RabbitMQPoolSize:      getEnvAsInt("RABBITMQ_POOL_SIZE", 24),
+		RabbitMQPrefetchCount: getEnvAsInt("RABBITMQ_PREFETCH_COUNT", 10000),
+		RabbitMQBatchSize:     getEnvAsInt("RABBITMQ_BATCH_SIZE", 1000),
+		RabbitMQBatchTimeout:  getEnvAsDuration("RABBITMQ_BATCH_TIMEOUT", 5*time.Millisecond),
 		RabbitMQConfirms:      getEnvAsBool("RABBITMQ_CONFIRMS", false),
 		RabbitMQPersistent:    getEnvAsBool("RABBITMQ_PERSISTENT", false),
 		RabbitMQHeartbeat:     getEnvAsDuration("RABBITMQ_HEARTBEAT", 30*time.Second),
 		RabbitMQChannelMax:    getEnvAsInt("RABBITMQ_CHANNEL_MAX", 4096),
 		RabbitMQFrameSize:     getEnvAsInt("RABBITMQ_FRAME_SIZE", 1048576),
 
-		BatchSizeRecords: getEnvAsInt("BATCH_SIZE_RECORDS", 1000),
+		BatchSizeRecords: getEnvAsInt("BATCH_SIZE_RECORDS", 4000),
 	}
 }
 

@@ -24,6 +24,29 @@ func main() {
 
 	cfg := config.LoadConfig()
 
+	// Enable profiling if ENABLE_PPROF environment variable is set
+	if os.Getenv("ENABLE_PPROF") == "true" {
+		go func() {
+			log.Println("Starting pprof server on :6060")
+			log.Println(http.ListenAndServe(":6060", nil))
+		}()
+	}
+
+	// Enable CPU profiling if CPU_PROFILE environment variable is set
+	if cpuProfile := os.Getenv("CPU_PROFILE"); cpuProfile != "" {
+		f, err := os.Create(cpuProfile)
+		if err != nil {
+			log.Fatal("Could not create CPU profile: ", err)
+		}
+		defer f.Close()
+		
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("Could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+		log.Printf("CPU profiling enabled, writing to %s", cpuProfile)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -71,6 +94,23 @@ func main() {
 	waitForCompletion(ctx, pool, startTime, expectedFiles)
 
 	progress.AddLog(fmt.Sprintf("Completed in %v", time.Since(startTime)))
+	
+	// Write memory profile if MEM_PROFILE environment variable is set
+	if memProfile := os.Getenv("MEM_PROFILE"); memProfile != "" {
+		f, err := os.Create(memProfile)
+		if err != nil {
+			log.Printf("Could not create memory profile: %v", err)
+		} else {
+			defer f.Close()
+			runtime.GC() // get up-to-date statistics
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				log.Printf("Could not write memory profile: %v", err)
+			} else {
+				log.Printf("Memory profile written to %s", memProfile)
+			}
+		}
+	}
+	
 	time.Sleep(2 * time.Second)
 }
 
