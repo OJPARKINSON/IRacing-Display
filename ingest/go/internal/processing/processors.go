@@ -115,10 +115,7 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 			l.workerID, len(l.sessionMap), l.trackName)
 	}
 
-	if l.metrics.totalProcessed%50000 == 0 {
-		log.Printf("Worker %d: Processed %d records, current batch size: %d",
-			l.workerID, l.metrics.totalProcessed, len(l.cache))
-	}
+	// Removed frequent logging for performance
 
 	enrichedInput := l.bufferPool.Get().(map[string]interface{})
 
@@ -178,13 +175,8 @@ func (l *loaderProcessor) Process(input ibt.Tick, hasNext bool, session *headers
 
 	shouldFlush := len(l.cache) >= maxBatchSize || l.currentBytes+estimatedSize > l.thresholdBytes
 	if shouldFlush && len(l.cache) > 0 {
-		if l.metrics.totalBatches%100 == 0 {
-			log.Printf("Worker %d: Flushing batch at %d records",
-				l.workerID, len(l.cache))
-		}
 		if err := l.loadBatch(); err != nil {
 			l.mu.Unlock()
-			// No need to put back since we're using new maps
 			return fmt.Errorf("failed to load batch: %w", err)
 		}
 	}
