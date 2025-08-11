@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 3,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -55,6 +55,7 @@
           "max": 100,
           "min": 0,
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
@@ -82,16 +83,19 @@
       },
       "id": 2,
       "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "values": false,
           "calcs": [
             "lastNotNull"
           ],
-          "fields": ""
+          "fields": "",
+          "values": false
         },
         "showThresholdLabels": false,
         "showThresholdMarkers": true,
+        "sizing": "auto",
         "text": {}
       },
       "pluginVersion": "10.4.8",
@@ -118,6 +122,7 @@
           "max": 100,
           "min": 0,
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
@@ -145,22 +150,25 @@
       },
       "id": 3,
       "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "values": false,
           "calcs": [
             "lastNotNull"
           ],
-          "fields": ""
+          "fields": "",
+          "values": false
         },
         "showThresholdLabels": false,
         "showThresholdMarkers": true,
+        "sizing": "auto",
         "text": {}
       },
       "pluginVersion": "10.4.8",
       "targets": [
         {
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\"}[5m])) * 100)",
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\"}[1m])) * 100)",
           "refId": "A"
         }
       ],
@@ -181,6 +189,7 @@
           "max": 100,
           "min": 0,
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
@@ -208,16 +217,19 @@
       },
       "id": 4,
       "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "values": false,
           "calcs": [
             "lastNotNull"
           ],
-          "fields": ""
+          "fields": "",
+          "values": false
         },
         "showThresholdLabels": false,
         "showThresholdMarkers": true,
+        "sizing": "auto",
         "text": {}
       },
       "pluginVersion": "10.4.8",
@@ -241,6 +253,7 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
@@ -252,10 +265,14 @@
             "hideFrom": {
               "legend": false,
               "tooltip": false,
-              "vis": false
+              "vis": false,
+              "viz": false
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
             "lineWidth": 1,
             "pointSize": 5,
             "scaleDistribution": {
@@ -273,6 +290,7 @@
           },
           "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
@@ -309,9 +327,15 @@
       },
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
           "expr": "node_hwmon_temp_celsius{job=\"node-exporter\"}",
-          "refId": "A",
-          "legendFormat": "CPU Temperature"
+          "legendFormat": "CPU Temperature",
+          "range": true,
+          "refId": "A"
         }
       ],
       "title": "Temperature",
@@ -365,6 +389,7 @@
             }
           ],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
@@ -412,8 +437,8 @@
           "id": "organize",
           "options": {
             "excludeByName": {
-              "__name__": true,
-              "Time": true
+              "Time": true,
+              "__name__": true
             },
             "indexByName": {},
             "renameByName": {
@@ -437,6 +462,7 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
@@ -448,7 +474,8 @@
             "hideFrom": {
               "legend": false,
               "tooltip": false,
-              "vis": false
+              "vis": false,
+              "viz": false
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
@@ -469,6 +496,7 @@
           },
           "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
@@ -505,14 +533,14 @@
       },
       "targets": [
         {
-          "expr": "rate(node_network_receive_bytes_total{job=\"node-exporter\",device!=\"lo\"}[5m])",
-          "refId": "A",
-          "legendFormat": "{{ device }} - Receive"
+          "expr": "rate(node_network_receive_bytes_total{job=\"node-exporter\",device!=\"lo\"}[1m])",
+          "legendFormat": "{{ device }} - Receive",
+          "refId": "A"
         },
         {
-          "expr": "rate(node_network_transmit_bytes_total{job=\"node-exporter\",device!=\"lo\"}[5m])",
-          "refId": "B",
-          "legendFormat": "{{ device }} - Transmit"
+          "expr": "rate(node_network_transmit_bytes_total{job=\"node-exporter\",device!=\"lo\"}[1m])",
+          "legendFormat": "{{ device }} - Transmit",
+          "refId": "B"
         }
       ],
       "title": "Network I/O",
@@ -542,6 +570,7 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
@@ -553,7 +582,8 @@
             "hideFrom": {
               "legend": false,
               "tooltip": false,
-              "vis": false
+              "vis": false,
+              "viz": false
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
@@ -574,6 +604,7 @@
           },
           "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
@@ -610,9 +641,9 @@
       },
       "targets": [
         {
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\"}[5m])) * 100)",
-          "refId": "A",
-          "legendFormat": "CPU Usage"
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\"}[1m])) * 100)",
+          "legendFormat": "CPU Usage",
+          "refId": "A"
         }
       ],
       "title": "System CPU Usage Over Time",
@@ -629,6 +660,7 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
@@ -640,7 +672,8 @@
             "hideFrom": {
               "legend": false,
               "tooltip": false,
-              "vis": false
+              "vis": false,
+              "viz": false
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
@@ -661,6 +694,7 @@
           },
           "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
@@ -698,18 +732,18 @@
       "targets": [
         {
           "expr": "node_memory_MemTotal_bytes{job=\"node-exporter\"}",
-          "refId": "A",
-          "legendFormat": "Total Memory"
+          "legendFormat": "Total Memory",
+          "refId": "A"
         },
         {
           "expr": "node_memory_MemAvailable_bytes{job=\"node-exporter\"}",
-          "refId": "B",
-          "legendFormat": "Available Memory"
+          "legendFormat": "Available Memory",
+          "refId": "B"
         },
         {
           "expr": "node_memory_MemTotal_bytes{job=\"node-exporter\"} - node_memory_MemAvailable_bytes{job=\"node-exporter\"}",
-          "refId": "C",
-          "legendFormat": "Used Memory"
+          "legendFormat": "Used Memory",
+          "refId": "C"
         }
       ],
       "title": "Memory Usage Over Time",
@@ -734,6 +768,7 @@
           },
           "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
@@ -841,7 +876,7 @@
             "indexByName": {},
             "renameByName": {
               "Value #A": "Total Memory",
-              "Value #B": "Available Memory", 
+              "Value #B": "Available Memory",
               "Value #C": "Load Average",
               "Value #D": "Uptime",
               "instance": "Host"
@@ -872,6 +907,6 @@
   "timezone": "",
   "title": "IRacing Telemetry System Dashboard",
   "uid": "iracing-telemetry-system",
-  "version": 1,
+  "version": 4,
   "weekStart": ""
 }
