@@ -29,17 +29,28 @@ const ProfessionalTelemetryCharts = React.memo(function ProfessionalTelemetryCha
 	onMouseLeave,
 }: ProfessionalTelemetryChartsProps) {
 	const chartData = useMemo(() => {
-		// Sample data for better performance - show every 10th point for charts
+		// Sample data for better performance - show every nth point for charts
 		// This reduces 39K points to ~4K points for rendering while maintaining shape
 		const sampleRate = Math.max(1, Math.floor(telemetryData.length / 4000));
-		const sampledData = telemetryData.filter((_, index) => index % sampleRate === 0);
 		
-		return sampledData.map((point, index) => ({
-			...point,
-			originalIndex: telemetryData.indexOf(point), // Keep original index for interactions
-			index: index,
-			lapDistance: (point.LapDistPct / 100) * 5.5, // Approximate track distance in km
-		}));
+		// PERFORMANCE FIX: Build sampled data and index mapping efficiently
+		const sampledData: (TelemetryDataPoint & { originalIndex: number; index: number; lapDistance: number })[] = [];
+		const originalToSampledIndex = new Map<number, number>();
+		
+		telemetryData.forEach((point, originalIndex) => {
+			if (originalIndex % sampleRate === 0) {
+				const sampledIndex = sampledData.length;
+				sampledData.push({
+					...point,
+					originalIndex, // Store original index efficiently
+					index: sampledIndex,
+					lapDistance: (point.LapDistPct / 100) * 5.5, // Approximate track distance in km
+				});
+				originalToSampledIndex.set(originalIndex, sampledIndex);
+			}
+		});
+		
+		return { sampledData, originalToSampledIndex };
 	}, [telemetryData]);
 
 	// Throttle hover events for better performance
@@ -57,8 +68,8 @@ const ProfessionalTelemetryCharts = React.memo(function ProfessionalTelemetryCha
 
 	const handleMouseMove = useCallback(
 		(data: any) => {
-			if (data && data.activeTooltipIndex !== undefined && chartData[data.activeTooltipIndex]) {
-				const originalIndex = chartData[data.activeTooltipIndex].originalIndex;
+			if (data && data.activeTooltipIndex !== undefined && chartData.sampledData[data.activeTooltipIndex]) {
+				const originalIndex = chartData.sampledData[data.activeTooltipIndex].originalIndex;
 				
 				// Skip if same index to prevent unnecessary updates
 				if (lastHoverIndex.current === originalIndex) return;
@@ -73,18 +84,18 @@ const ProfessionalTelemetryCharts = React.memo(function ProfessionalTelemetryCha
 				});
 			}
 		},
-		[onHover, chartData],
+		[onHover, chartData.sampledData],
 	);
 
 	const handleChartClick = useCallback(
 		(data: any) => {
-			if (data && data.activeTooltipIndex !== undefined && chartData[data.activeTooltipIndex]) {
+			if (data && data.activeTooltipIndex !== undefined && chartData.sampledData[data.activeTooltipIndex]) {
 				// Use original index from the sampled data
-				const originalIndex = chartData[data.activeTooltipIndex].originalIndex;
+				const originalIndex = chartData.sampledData[data.activeTooltipIndex].originalIndex;
 				onIndexChange(originalIndex);
 			}
 		},
-		[onIndexChange, chartData],
+		[onIndexChange, chartData.sampledData],
 	);
 
 	// Memoize chart configurations to prevent recreations
@@ -157,6 +168,25 @@ const ProfessionalTelemetryCharts = React.memo(function ProfessionalTelemetryCha
 		return null;
 	}, []);
 
+	// PERFORMANCE FIX: Memoize reference line position to prevent jumping
+	const referenceLineDistance = useMemo(() => {
+		if (selectedIndex < 0 || !telemetryData[selectedIndex]) return null;
+		
+		// Try to find exact sampled point first
+		const sampledIndex = chartData.originalToSampledIndex.get(selectedIndex);
+		if (sampledIndex !== undefined && chartData.sampledData[sampledIndex]) {
+			return chartData.sampledData[sampledIndex].lapDistance;
+		}
+		
+		// Fallback: calculate from original data
+		const originalPoint = telemetryData[selectedIndex];
+		if (originalPoint?.LapDistPct !== undefined) {
+			return (originalPoint.LapDistPct / 100) * 5.5;
+		}
+		
+		return null;
+	}, [selectedIndex, chartData.originalToSampledIndex, chartData.sampledData, telemetryData]);
+
 	return (
 		<div 
 			className="flex flex-col space-y-3"
@@ -178,7 +208,7 @@ const ProfessionalTelemetryCharts = React.memo(function ProfessionalTelemetryCha
 					<div style={{ height: config.height }}>
 						<ResponsiveContainer width="100%" height="100%">
 							<LineChart
-								data={chartData}
+								data={chartData.sampledData}
 								onMouseMove={handleMouseMove}
 								onClick={handleChartClick}
 								margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
@@ -218,10 +248,10 @@ const ProfessionalTelemetryCharts = React.memo(function ProfessionalTelemetryCha
 									connectNulls={false}
 								/>
 								
-								{/* Reference line for selected position - only render when needed */}
-								{selectedIndex >= 0 && selectedIndex < chartData.length && chartData[selectedIndex]?.lapDistance !== undefined && (
+								{/* FIXED: Memoized reference line to prevent jumping */}
+								{referenceLineDistance !== null && (
 									<ReferenceLine
-										x={chartData[selectedIndex].lapDistance}
+										x={referenceLineDistance}
 										stroke="#ffffff"
 										strokeWidth={1}
 										strokeDasharray="2 2"

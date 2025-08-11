@@ -12,6 +12,7 @@ import { Circle, Fill, Stroke, Style } from "ol/style";
 import View from "ol/View";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TelemetryDataPoint } from "@/lib/types";
+import { usePerformanceMonitor } from "@/hooks/usePerformanceMonitor";
 
 interface OptimizedTrackMapProps {
 	dataWithCoordinates: TelemetryDataPoint[];
@@ -44,23 +45,38 @@ export default function OptimizedTrackMap({
 		selectedMetric || "Speed",
 	);
 
-	// Color mapping function for different metrics
+	// PERFORMANCE FIX: Color cache to avoid recalculating same colors
+	const colorCacheRef = useRef<Map<string, string>>(new Map());
+
+	// Performance monitoring (enable during development)
+	const perfMonitor = usePerformanceMonitor("OptimizedTrackMap", process.env.NODE_ENV === 'development');
+
+	// Color mapping function for different metrics with caching
 	const getColorForMetric = useCallback(
 		(value: number, metric: string, minVal: number, maxVal: number): string => {
 			if (!value || minVal === maxVal) return "#888888";
 
+			// PERFORMANCE FIX: Use cache to avoid recalculating same colors
+			const cacheKey = `${metric}-${value}-${minVal}-${maxVal}`;
+			const cached = colorCacheRef.current.get(cacheKey);
+			if (cached) return cached;
+
 			const normalized = (value - minVal) / (maxVal - minVal);
+			let color: string;
 
 			switch (metric) {
 				case "Speed":
-					if (normalized < 0.3) return "#ef4444"; // Red for low speed
-					if (normalized < 0.6) return "#f97316"; // Orange for medium
-					if (normalized < 0.8) return "#eab308"; // Yellow for medium-high
-					return "#22c55e"; // Green for high speed
+					if (normalized < 0.3) color = "#ef4444"; // Red for low speed
+					else if (normalized < 0.6) color = "#f97316"; // Orange for medium
+					else if (normalized < 0.8) color = "#eab308"; // Yellow for medium-high
+					else color = "#22c55e"; // Green for high speed
+					break;
 				case "Throttle":
-					return `rgb(0, ${Math.round(150 + 105 * normalized)}, 0)`; // Green gradient
+					color = `rgb(0, ${Math.round(150 + 105 * normalized)}, 0)`; // Green gradient
+					break;
 				case "Brake":
-					return `rgb(${Math.round(150 + 105 * normalized)}, 0, 0)`; // Red gradient
+					color = `rgb(${Math.round(150 + 105 * normalized)}, 0, 0)`; // Red gradient
+					break;
 				case "Gear": {
 					const gearColors = [
 						"#ef4444",
@@ -72,19 +88,31 @@ export default function OptimizedTrackMap({
 						"#ec4899",
 						"#f59e0b",
 					];
-					return (
-						gearColors[Math.min(Math.floor(normalized * 8), 7)] || "#888888"
-					);
+					color = gearColors[Math.min(Math.floor(normalized * 8), 7)] || "#888888";
+					break;
 				}
 				case "RPM":
-					return `rgb(${Math.round(255 * normalized)}, ${Math.round(100 + 155 * (1 - normalized))}, 255)`; // Purple-pink gradient
+					color = `rgb(${Math.round(255 * normalized)}, ${Math.round(100 + 155 * (1 - normalized))}, 255)`; // Purple-pink gradient
+					break;
 				case "SteeringWheelAngle": {
 					const absNormalized = Math.abs(normalized - 0.5) * 2;
-					return `rgb(${Math.round(150 + 105 * absNormalized)}, 0, ${Math.round(150 + 105 * absNormalized)})`; // Purple for steering
+					color = `rgb(${Math.round(150 + 105 * absNormalized)}, 0, ${Math.round(150 + 105 * absNormalized)})`; // Purple for steering
+					break;
 				}
 				default:
-					return `rgb(${Math.round(100 + 155 * normalized)}, ${Math.round(100 + 155 * (1 - normalized))}, 255)`;
+					color = `rgb(${Math.round(100 + 155 * normalized)}, ${Math.round(100 + 155 * (1 - normalized))}, 255)`;
 			}
+
+			// Cache the result
+			colorCacheRef.current.set(cacheKey, color);
+			
+			// Limit cache size to prevent memory leaks
+			if (colorCacheRef.current.size > 10000) {
+				const firstKey = colorCacheRef.current.keys().next().value;
+				colorCacheRef.current.delete(firstKey!);
+			}
+
+			return color;
 		},
 		[],
 	);
@@ -269,7 +297,8 @@ export default function OptimizedTrackMap({
 		);
 	}, [staticTrackData]); // Only render if track data changes
 
-	// DYNAMIC: Update ONLY the marker position (no re-rendering of track)
+	// DYNAMIC: Update ONLY the marker position with throttling
+	const lastMarkerUpdateRef = useRef<number>(0);
 	useEffect(() => {
 		if (!markerSourceRef.current || !staticTrackData || selectedPointIndex < 0)
 			return;
@@ -277,16 +306,28 @@ export default function OptimizedTrackMap({
 		const point = staticTrackData.validGPSPoints[selectedPointIndex];
 		if (!point) return;
 
-		// Clear previous marker
-		markerSourceRef.current.clear();
+		// PERFORMANCE FIX: Throttle marker updates to 60fps max
+		const now = performance.now();
+		if (now - lastMarkerUpdateRef.current < 16) { // 60fps = 16.67ms
+			return;
+		}
+		lastMarkerUpdateRef.current = now;
 
-		// Add new marker at selected position
-		const markerFeature = new Feature({
-			geometry: new Point(fromLonLat([point.Lon, point.Lat])),
-			selectedIndex: selectedPointIndex,
+		// Use requestAnimationFrame for smooth marker movement
+		requestAnimationFrame(() => {
+			if (!markerSourceRef.current) return;
+
+			// Clear previous marker
+			markerSourceRef.current.clear();
+
+			// Add new marker at selected position
+			const markerFeature = new Feature({
+				geometry: new Point(fromLonLat([point.Lon, point.Lat])),
+				selectedIndex: selectedPointIndex,
+			});
+
+			markerSourceRef.current.addFeature(markerFeature);
 		});
-
-		markerSourceRef.current.addFeature(markerFeature);
 
 		// No console log here to avoid spam - this runs frequently
 	}, [selectedPointIndex, staticTrackData]); // Updates frequently but only affects marker
@@ -297,6 +338,9 @@ export default function OptimizedTrackMap({
 
 		console.log("Updating racing line colors for metric:", displayMetric);
 
+		// PERFORMANCE FIX: Clear color cache when metric changes to avoid stale colors
+		colorCacheRef.current.clear();
+
 		// Get the racing line layer
 		const layers = mapInstanceRef.current.getLayers().getArray();
 		const racingLineLayer = layers.find(
@@ -306,26 +350,51 @@ export default function OptimizedTrackMap({
 		) as VectorLayer<VectorSource>;
 
 		if (racingLineLayer) {
-			// Set the style function for the current metric
-			racingLineLayer.setStyle((feature) => {
-				const metricValue = feature.get(displayMetric) || 0;
-				const minVal = feature.get(`${displayMetric}_min`) || 0;
-				const maxVal = feature.get(`${displayMetric}_max`) || 1;
+			// PERFORMANCE FIX: Batch style updates using requestAnimationFrame
+			const updateStyles = () => {
+				const features = racingLineSourceRef.current?.getFeatures();
+				if (!features) return;
 
-				const color = getColorForMetric(
-					metricValue,
-					displayMetric,
-					minVal,
-					maxVal,
-				);
+				// Batch style updates to avoid layout thrashing
+				features.forEach((feature) => {
+					const metricValue = feature.get(displayMetric) || 0;
+					const minVal = feature.get(`${displayMetric}_min`) || 0;
+					const maxVal = feature.get(`${displayMetric}_max`) || 1;
 
-				return new Style({
-					stroke: new Stroke({
-						color: color,
-						width: 3,
-					}),
+					const color = getColorForMetric(
+						metricValue,
+						displayMetric,
+						minVal,
+						maxVal,
+					);
+
+					// Reuse existing style object if possible
+					const existingStyle = feature.getStyle();
+					if (existingStyle && typeof existingStyle !== 'function' && Array.isArray(existingStyle) === false) {
+						const stroke = (existingStyle as Style).getStroke();
+						if (stroke) {
+							stroke.setColor(color);
+							return; // Skip creating new style
+						}
+					}
+
+					// Create new style only if needed
+					feature.setStyle(
+						new Style({
+							stroke: new Stroke({
+								color: color,
+								width: 3,
+							}),
+						})
+					);
 				});
-			});
+
+				// Force layer redraw
+				racingLineLayer.changed();
+			};
+
+			// Use requestAnimationFrame for smooth updates
+			requestAnimationFrame(updateStyles);
 		}
 	}, [displayMetric, getColorForMetric]);
 
