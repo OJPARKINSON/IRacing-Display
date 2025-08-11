@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 	"syscall"
 	"time"
@@ -39,7 +42,7 @@ func main() {
 			log.Fatal("Could not create CPU profile: ", err)
 		}
 		defer f.Close()
-		
+
 		if err := pprof.StartCPUProfile(f); err != nil {
 			log.Fatal("Could not start CPU profile: ", err)
 		}
@@ -94,7 +97,7 @@ func main() {
 	waitForCompletion(ctx, pool, startTime, expectedFiles)
 
 	progress.AddLog(fmt.Sprintf("Completed in %v", time.Since(startTime)))
-	
+
 	// Write memory profile if MEM_PROFILE environment variable is set
 	if memProfile := os.Getenv("MEM_PROFILE"); memProfile != "" {
 		f, err := os.Create(memProfile)
@@ -110,7 +113,7 @@ func main() {
 			}
 		}
 	}
-	
+
 	time.Sleep(2 * time.Second)
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useMemo, useRef } from "react";
 import type { TelemetryDataPoint } from "@/lib/types";
 
 /**
@@ -7,6 +7,15 @@ import type { TelemetryDataPoint } from "@/lib/types";
 export function useTrackPosition(telemetryData: TelemetryDataPoint[]) {
 	const [selectedIndex, setSelectedIndex] = useState<number>(0);
 	const [selectedLapPct, setSelectedLapPct] = useState<number>(0);
+	
+	// Cache for expensive lookups
+	const lookupCacheRef = useRef<Map<number, TelemetryDataPoint>>(new Map());
+	
+	// Memoize sorted data for faster lookups
+	const sortedData = useMemo(() => {
+		if (!telemetryData?.length) return [];
+		return [...telemetryData].sort((a, b) => a.LapDistPct - b.LapDistPct);
+	}, [telemetryData]);
 
 	/**
 	 * Find the best point on the track corresponding to a specific chart index
@@ -34,29 +43,54 @@ export function useTrackPosition(telemetryData: TelemetryDataPoint[]) {
 	/**
 	 * Find the exact point on the track for display
 	 * This ensures the marker appears at precisely the right place
+	 * Optimized with caching and binary search for better performance
 	 */
 	const getTrackDisplayPoint = useCallback(() => {
-		if (!telemetryData || telemetryData.length === 0) {
+		if (!sortedData.length) {
 			return null;
 		}
 
-		// Find the point closest to the selected lap percentage
-		let bestPoint = null;
-		let minDistance = 100; // Maximum possible distance is 100%
+		// Check cache first
+		const cacheKey = Math.floor(selectedLapPct * 1000); // Round to 3 decimal places for caching
+		if (lookupCacheRef.current.has(cacheKey)) {
+			return lookupCacheRef.current.get(cacheKey)!;
+		}
 
-		for (const point of telemetryData) {
+		// Use binary search for faster lookup in sorted data
+		let left = 0;
+		let right = sortedData.length - 1;
+		let bestPoint = sortedData[0];
+		let minDistance = Math.abs(sortedData[0].LapDistPct - selectedLapPct);
+
+		while (left <= right) {
+			const mid = Math.floor((left + right) / 2);
+			const point = sortedData[mid];
 			const distance = Math.abs(point.LapDistPct - selectedLapPct);
-			// Handle wrap-around case (e.g., 99% vs 1%)
 			const wrappedDistance = Math.min(distance, 100 - distance);
 
 			if (wrappedDistance < minDistance) {
 				minDistance = wrappedDistance;
 				bestPoint = point;
 			}
+
+			if (point.LapDistPct < selectedLapPct) {
+				left = mid + 1;
+			} else {
+				right = mid - 1;
+			}
+		}
+
+		// Cache the result
+		lookupCacheRef.current.set(cacheKey, bestPoint);
+		
+		// Limit cache size to prevent memory leaks
+		if (lookupCacheRef.current.size > 1000) {
+			const firstKey = lookupCacheRef.current.keys().next().value;
+			lookupCacheRef.current.delete(firstKey);
 		}
 
 		return bestPoint;
-	}, [telemetryData, selectedLapPct]);
+	}, [sortedData, selectedLapPct]);
 
 	return {
 		selectedIndex,

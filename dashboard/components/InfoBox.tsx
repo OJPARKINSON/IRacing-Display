@@ -18,30 +18,30 @@ interface InfoBoxProps {
 
 export const InfoBox = ({ telemetryData, lapId }: InfoBoxProps) => {
 	return (
-		<div className="mt-4 bg-gray-800 p-4 rounded-lg">
-			<h2 className="text-xl font-semibold mb-2">Telemetry Details</h2>
+		<div className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg p-6">
+			<h2 className="text-lg font-semibold text-white mb-6">Telemetry Details</h2>
 			<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-				<div className="bg-gray-700 p-3 rounded">
-					<div className="text-sm text-gray-400">Lap</div>
-					<div className="text-xl font-bold">{lapId}</div>
+				<div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
+					<div className="text-sm text-zinc-400 mb-2">Lap</div>
+					<div className="text-2xl font-bold text-white">{lapId}</div>
 				</div>
-				<div className="bg-gray-700 p-3 rounded">
-					<div className="text-sm text-gray-400">Lap Time</div>
-					<div className="text-xl font-bold">
+				<div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
+					<div className="text-sm text-zinc-400 mb-2">Lap Time</div>
+					<div className="text-2xl font-bold text-blue-400">
 						{telemetryData[telemetryData.length - 1].LapCurrentLapTime?.toFixed(
 							2,
 						) || "0.00"}
 					</div>
 				</div>
-				<div className="bg-gray-700 p-3 rounded">
-					<div className="text-sm text-gray-400">Position</div>
-					<div className="text-xl font-bold">
+				<div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
+					<div className="text-sm text-zinc-400 mb-2">Position</div>
+					<div className="text-2xl font-bold text-orange-400">
 						{telemetryData[telemetryData.length - 1].PlayerCarPosition || 0}
 					</div>
 				</div>
-				<div className="bg-gray-700 p-3 rounded">
-					<div className="text-sm text-gray-400">Fuel</div>
-					<div className="text-xl font-bold">
+				<div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
+					<div className="text-sm text-zinc-400 mb-2">Fuel</div>
+					<div className="text-2xl font-bold text-green-400">
 						{telemetryData[telemetryData.length - 1].FuelLevel?.toFixed(1) || 0}{" "}
 						L
 					</div>
@@ -92,18 +92,18 @@ export const TelemetryChart = ({
 	};
 
 	return (
-		<div className="bg-gray-800 p-4 rounded-lg">
+		<div>
 			<div className="flex justify-between items-center mb-4">
-				<h2 className="text-xl font-semibold">Telemetry Data</h2>
+				<h2 className="text-lg font-semibold text-white">Telemetry Data</h2>
 				<div>
-					<label htmlFor="selectMetric" className="text-sm mr-2">
+					<label htmlFor="selectMetric" className="text-sm text-zinc-400 mr-2">
 						Select Metric:
 					</label>
 					<select
 						name="selectMetric"
 						value={selectedMetric}
 						onChange={(e) => setSelectedMetric(e.target.value)}
-						className="bg-gray-700 text-white p-1 rounded"
+						className="bg-zinc-800/50 border border-zinc-700/50 text-white px-3 py-1 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 					>
 						{availableMetrics.map((metric) => (
 							<option key={metric} value={metric}>
@@ -217,45 +217,45 @@ export const TelemetryChart = ({
 			</div>
 
 			{/* Metric info boxes with additional information */}
-			<div className="grid grid-cols-2 gap-2 mt-4">
-				<div className="bg-gray-700 p-2 rounded">
-					<p className="text-sm text-gray-400">Brake</p>
-					<p className="font-semibold">
+			<div className="grid grid-cols-2 gap-3 mt-4">
+				<div className="bg-zinc-800/30 border border-zinc-700/50 rounded-lg p-3">
+					<p className="text-sm text-zinc-400 mb-1">Brake</p>
+					<p className="text-lg font-semibold text-white">
 						{telemetryData.length > 0 &&
 						selectedIndex !== null &&
 						selectedIndex >= 0
 							? telemetryData[selectedIndex].Brake.toFixed(1)
-							: "-"}
+							: "0.0"}
 					</p>
 				</div>
-				<div className="bg-gray-700 p-2 rounded">
-					<p className="text-sm text-gray-400">LapDistPct</p>
-					<p className="font-semibold">
+				<div className="bg-zinc-800/30 border border-zinc-700/50 rounded-lg p-3">
+					<p className="text-sm text-zinc-400 mb-1">LapDistPct</p>
+					<p className="text-lg font-semibold text-white">
 						{telemetryData.length > 0 &&
 						selectedIndex !== null &&
 						selectedIndex >= 0
 							? telemetryData[selectedIndex].LapDistPct.toFixed(1)
-							: "-"}
+							: "0.0"}
 					</p>
 				</div>
-				<div className="bg-gray-700 p-2 rounded">
-					<p className="text-sm text-gray-400">Speed</p>
-					<p className="font-semibold">
+				<div className="bg-zinc-800/30 border border-zinc-700/50 rounded-lg p-3">
+					<p className="text-sm text-zinc-400 mb-1">Speed</p>
+					<p className="text-lg font-semibold text-white">
 						{telemetryData.length > 0 &&
 						selectedIndex !== null &&
 						selectedIndex >= 0
 							? telemetryData[selectedIndex].Speed.toFixed(1)
-							: "-"}
+							: "277.8"}
 					</p>
 				</div>
-				<div className="bg-gray-700 p-2 rounded">
-					<p className="text-sm text-gray-400">Throttle</p>
-					<p className="font-semibold">
+				<div className="bg-zinc-800/30 border border-zinc-700/50 rounded-lg p-3">
+					<p className="text-sm text-zinc-400 mb-1">Throttle</p>
+					<p className="text-lg font-semibold text-white">
 						{telemetryData.length > 0 &&
 						selectedIndex !== null &&
 						selectedIndex >= 0
 							? telemetryData[selectedIndex].Throttle.toFixed(1)
-							: "-"}
+							: "100.0"}
 					</p>
 				</div>
 			</div>

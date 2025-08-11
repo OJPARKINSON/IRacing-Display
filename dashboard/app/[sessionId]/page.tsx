@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getLaps, getTelemetryData } from "@/lib/questDb";
 import TelemetryPage from "../../components/TelemetryPage";
+import ClientWrapper from "../../components/ClientWrapper";
 
 // Force dynamic rendering - prevent build-time execution
 export const dynamic = "force-dynamic";
@@ -43,14 +44,16 @@ export default async function SessionPage({ params, searchParams }: PageProps) {
 		);
 
 		return (
-			<Suspense fallback={<TelemetryLoadingSkeleton />}>
-				<TelemetryPage
-					initialTelemetryData={telemetryData}
-					availableLaps={availableLaps}
-					sessionId={sessionId}
-					currentLapId={currentLapId}
-				/>
-			</Suspense>
+			<ClientWrapper fallback={<TelemetryLoadingSkeleton />}>
+				<Suspense fallback={<TelemetryLoadingSkeleton />}>
+					<TelemetryPage
+						initialTelemetryData={telemetryData}
+						availableLaps={availableLaps}
+						sessionId={sessionId}
+						currentLapId={currentLapId}
+					/>
+				</Suspense>
+			</ClientWrapper>
 		);
 	} catch (error) {
 		console.error("Error fetching telemetry data at runtime:", error);
@@ -60,12 +63,39 @@ export default async function SessionPage({ params, searchParams }: PageProps) {
 
 function TelemetryLoadingSkeleton() {
 	return (
-		<div className="p-4 bg-gray-900 text-white min-h-screen">
-			<div className="animate-pulse">
-				<div className="h-8 bg-gray-700 rounded w-64 mb-4" />
-				<div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-					<div className="col-span-2 h-96 bg-gray-700 rounded" />
-					<div className="h-96 bg-gray-700 rounded" />
+		<div className="min-h-screen bg-zinc-950 flex">
+			{/* Sidebar Skeleton */}
+			<div className="w-64 bg-zinc-900/50 border-r border-zinc-800/50 flex flex-col">
+				<div className="px-6 py-6">
+					<div className="animate-pulse">
+						<div className="flex items-center space-x-3">
+							<div className="w-8 h-8 bg-zinc-700 rounded-lg"></div>
+							<div>
+								<div className="h-4 w-16 bg-zinc-700 rounded mb-1"></div>
+								<div className="h-3 w-12 bg-zinc-700 rounded"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			{/* Main Content Skeleton */}
+			<div className="flex-1 flex flex-col">
+				<div className="bg-zinc-950/50 border-b border-zinc-800/50 px-6 py-4">
+					<div className="animate-pulse h-4 w-48 bg-zinc-700 rounded"></div>
+				</div>
+				<div className="flex-1 p-6">
+					<div className="animate-pulse space-y-6">
+						<div className="grid grid-cols-3 gap-6">
+							<div className="bg-zinc-800/50 h-32 rounded-lg"></div>
+							<div className="bg-zinc-800/50 h-32 rounded-lg"></div>
+							<div className="bg-zinc-800/50 h-32 rounded-lg"></div>
+						</div>
+						<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+							<div className="col-span-2 bg-zinc-800/50 h-96 rounded-lg"></div>
+							<div className="bg-zinc-800/50 h-96 rounded-lg"></div>
+						</div>
+					</div>
 				</div>
 			</div>
 		</div>
