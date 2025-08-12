@@ -5,9 +5,9 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
-      - "80:80"
-      - "443:443"
-      - "8080:8080"
+      - "8080:80"   # HTTP redirect port
+      - "8443:443"  # HTTPS main port  
+      - "9080:8080" # Traefik dashboard
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./certs:/certs:ro
@@ -118,6 +118,7 @@ services:
       - "traefik.http.routers.rabbitmq.rule=Host(`${HOST_IP:-192.168.1.202}`) && PathPrefix(`/rabbitmq`)"
       - "traefik.http.routers.rabbitmq.entrypoints=websecure"
       - "traefik.http.routers.rabbitmq.tls=true"
+      - "traefik.http.routers.rabbitmq.priority=100"
       - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
       - "traefik.http.middlewares.rabbitmq-stripprefix.stripprefix.prefixes=/rabbitmq"
       - "traefik.http.routers.rabbitmq.middlewares=rabbitmq-stripprefix"
@@ -167,16 +168,15 @@ services:
           memory: 3g
     shm_size: 256m
     labels:
-      # Watchtower labels
+      - "traefik.enable=true"
+      - "traefik.http.routers.telemetry-dashboard.rule=Host(`${HOST_IP:-192.168.1.202}`)"
+      - "traefik.http.routers.telemetry-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.telemetry-dashboard.tls=true"
+      - "traefik.http.routers.telemetry-dashboard.priority=1"
+      - "traefik.http.services.telemetry-dashboard.loadbalancer.server.port=3000"
+
       - "com.centurylinklabs.watchtower.enable=true"
       - "com.centurylinklabs.watchtower.monitor-only=false"
-      
-      # Traefik labels - Main dashboard
-      - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`${HOST_IP:-192.168.1.202}`)"
-      - "traefik.http.routers.dashboard.entrypoints=websecure"
-      - "traefik.http.routers.dashboard.tls=true"
-      - "traefik.http.services.dashboard.loadbalancer.server.port=3000"
     
   questdb:
     image: questdb/questdb:latest
@@ -206,6 +206,7 @@ services:
       - "traefik.http.routers.questdb.rule=Host(`${HOST_IP:-192.168.1.202}`) && PathPrefix(`/questdb`)"
       - "traefik.http.routers.questdb.entrypoints=websecure"
       - "traefik.http.routers.questdb.tls=true"
+      - "traefik.http.routers.questdb.priority=100"
       - "traefik.http.services.questdb.loadbalancer.server.port=9000"
       - "traefik.http.middlewares.questdb-stripprefix.stripprefix.prefixes=/questdb"
       - "traefik.http.routers.questdb.middlewares=questdb-stripprefix"
@@ -271,6 +272,7 @@ services:
       - "traefik.http.routers.prometheus.rule=Host(`${HOST_IP:-192.168.1.202}`) && PathPrefix(`/prometheus`)"
       - "traefik.http.routers.prometheus.entrypoints=websecure"
       - "traefik.http.routers.prometheus.tls=true"
+      - "traefik.http.routers.prometheus.priority=100"
       - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
       - "traefik.http.middlewares.prometheus-stripprefix.stripprefix.prefixes=/prometheus"
       - "traefik.http.routers.prometheus.middlewares=prometheus-stripprefix"
@@ -332,6 +334,7 @@ services:
       - "traefik.http.routers.grafana.rule=Host(`${HOST_IP:-192.168.1.202}`) && PathPrefix(`/grafana`)"
       - "traefik.http.routers.grafana.entrypoints=websecure"
       - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.routers.grafana.priority=100"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
       - "traefik.http.middlewares.grafana-stripprefix.stripprefix.prefixes=/grafana"
       - "traefik.http.routers.grafana.middlewares=grafana-stripprefix"
