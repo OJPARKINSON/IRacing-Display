@@ -169,7 +169,7 @@ services:
     shm_size: 256m
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.telemetry-dashboard.rule=Host(`${HOST_IP:-192.168.1.202}`)"
+      - "traefik.http.routers.telemetry-dashboard.rule=Host(`${HOST_IP:-192.168.1.202}`) && PathPrefix(`/`)"
       - "traefik.http.routers.telemetry-dashboard.entrypoints=websecure"
       - "traefik.http.routers.telemetry-dashboard.tls=true"
       - "traefik.http.routers.telemetry-dashboard.priority=1"
