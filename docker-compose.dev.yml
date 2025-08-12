@@ -37,7 +37,7 @@ services:
       DOTNET_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:5000
       DOTNET_GCRetainVM: 1
-      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: true
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 1
     shm_size: 256m
     labels:
       com.centurylinklabs.watchtower.enable: "true"

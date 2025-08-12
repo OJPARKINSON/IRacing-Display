@@ -1,16 +1,17 @@
 services:
-  nginx:
-    image: nginx:alpine
-    container_name: nginx-proxy
+  traefik:
+    image: traefik:v3.5
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "80:80"
       - "443:443"
+      - "8080:8080"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl/certs:/etc/ssl/certs:ro
-      - ./ssl/private:/etc/ssl/private:ro
-      - nginx-logs:/var/log/nginx
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ../certs:/certs:ro
+      - ./dynamic:/dynamic:ro
     networks:
       - telemetry-network
     depends_on:
@@ -24,10 +25,63 @@ services:
           cpus: 0.5
           memory: 512m
     healthcheck:
-      test: ["CMD", "nginx", "-t"]
+      test: ["CMD", "traefik", "healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3
+    command:
+      # EntryPoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.http.tls=true"
+
+      # Attach the static configuration tls.yaml file that contains the tls configuration settings
+      - "--providers.file.filename=/dynamic/tls.yaml"
+
+      # Providers 
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=telemetry-network"
+
+      # API & Dashboard 
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+
+      # Observability 
+      - "--log.level=INFO"
+      - "--accesslog=true"
+      - "--metrics.prometheus=true"
+
+  # Traefik Dynamic configuration via Docker labels
+    labels:
+      # Enable self‑routing
+      - "traefik.enable=true"
+
+      # Dashboard router
+      - "traefik.http.routers.dashboard.rule=Host(`dashboard.docker.localhost`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.tls=true"
+
+      # Basic‑auth middleware
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth@docker"
+
+      # Let's Encrypt configuration (uncomment when deploying to production)
+      # - "--certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL}"
+      # - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      # - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+      # - "--entrypoints.websecure.http.tls.certresolver=le"
+
+      - "--entrypoints.metrics.address=:8082"
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.entrypoint=metrics"
+      - "--metrics.prometheus.addrouterslabels=true"
+      - "--metrics.prometheus.addserviceslabels=true"
+
 
   rabbitMQ:
     container_name: rabbitMQ
@@ -50,14 +104,23 @@ services:
       - telemetry-network
     restart: always
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
     deploy:
       resources:
         limits:
           cpus: 1
           memory: 2g
     shm_size: 256m
+    labels:
+      # Traefik labels - RabbitMQ Management
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.rule=Host(`${HOST_IP:-192.168.1.202}`) && PathPrefix(`/rabbitmq`)"
+      - "traefik.http.routers.rabbitmq.entrypoints=websecure"
+      - "traefik.http.routers.rabbitmq.tls=true"
+      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
+      - "traefik.http.middlewares.rabbitmq-stripprefix.stripprefix.prefixes=/rabbitmq"
+      - "traefik.http.routers.rabbitmq.middlewares=rabbitmq-stripprefix"
 
   telemetry_service:
     image: ghcr.io/ojparkinson/iracing-telemetryservice:latest
@@ -75,7 +138,7 @@ services:
       DOTNET_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:5000
       DOTNET_GCRetainVM: 1
-      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: true
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 1
     deploy:
       resources:
         limits:
@@ -104,8 +167,16 @@ services:
           memory: 3g
     shm_size: 256m
     labels:
+      # Watchtower labels
       com.centurylinklabs.watchtower.enable: "true"
       com.centurylinklabs.watchtower.monitor-only: "false"
+      
+      # Traefik labels - Main dashboard
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`${HOST_IP:-192.168.1.202}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=3000"
     
   questdb:
     image: questdb/questdb:latest
@@ -129,6 +200,15 @@ services:
       start_period: 30s
     networks:
       - telemetry-network
+    labels:
+      # Traefik labels - QuestDB
+      - "traefik.enable=true"
+      - "traefik.http.routers.questdb.rule=Host(`${HOST_IP:-192.168.1.202}`) && PathPrefix(`/questdb`)"
+      - "traefik.http.routers.questdb.entrypoints=websecure"
+      - "traefik.http.routers.questdb.tls=true"
+      - "traefik.http.services.questdb.loadbalancer.server.port=9000"
+      - "traefik.http.middlewares.questdb-stripprefix.stripprefix.prefixes=/questdb"
+      - "traefik.http.routers.questdb.middlewares=questdb-stripprefix"
 
   watchtower:
     image: containrrr/watchtower
@@ -185,6 +265,15 @@ services:
       - '--web.enable-lifecycle'
     networks:
       - telemetry-network
+    labels:
+      # Traefik labels - Prometheus
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`${HOST_IP:-192.168.1.202}`) && PathPrefix(`/prometheus`)"
+      - "traefik.http.routers.prometheus.entrypoints=websecure"
+      - "traefik.http.routers.prometheus.tls=true"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+      - "traefik.http.middlewares.prometheus-stripprefix.stripprefix.prefixes=/prometheus"
+      - "traefik.http.routers.prometheus.middlewares=prometheus-stripprefix"
 
   loki:
     image: grafana/loki:2.9.8
@@ -232,11 +321,20 @@ services:
       - ./grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
       - ./grafana-dashboards:/etc/grafana/provisioning/dashboards/files:ro
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin123}
       - GF_USERS_ALLOW_SIGN_UP=false
     networks:
       - telemetry-network
     user: "472:472"
+    labels:
+      # Traefik labels - Grafana
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`${HOST_IP:-192.168.1.202}`) && PathPrefix(`/grafana`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      - "traefik.http.middlewares.grafana-stripprefix.stripprefix.prefixes=/grafana"
+      - "traefik.http.routers.grafana.middlewares=grafana-stripprefix"
 
 volumes:
   rabbitmq-data:
