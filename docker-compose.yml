@@ -10,7 +10,7 @@ services:
       - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ../certs:/certs:ro
+      - ./certs:/certs:ro
       - ./dynamic:/dynamic:ro
     networks:
       - telemetry-network
@@ -168,8 +168,8 @@ services:
     shm_size: 256m
     labels:
       # Watchtower labels
-      com.centurylinklabs.watchtower.enable: "true"
-      com.centurylinklabs.watchtower.monitor-only: "false"
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "com.centurylinklabs.watchtower.monitor-only=false"
       
       # Traefik labels - Main dashboard
       - "traefik.enable=true"
