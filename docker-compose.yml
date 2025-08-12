@@ -158,7 +158,8 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: https://${HOST_IP:-192.168.1.202}:8443/dashboard
+      NEXT_PUBLIC_BACKEND_URL: https://${HOST_IP:-192.168.1.202}:8443
     networks:
       - telemetry-network
     deploy:
@@ -169,11 +170,13 @@ services:
     shm_size: 256m
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.telemetry-dashboard.rule=Host(`${HOST_IP:-192.168.1.202}`) && PathPrefix(`/`)"
+      - "traefik.http.routers.telemetry-dashboard.rule=Host(`${HOST_IP:-192.168.1.202}`) && PathPrefix(`/dashboard`)"
       - "traefik.http.routers.telemetry-dashboard.entrypoints=websecure"
       - "traefik.http.routers.telemetry-dashboard.tls=true"
       - "traefik.http.routers.telemetry-dashboard.priority=1"
       - "traefik.http.services.telemetry-dashboard.loadbalancer.server.port=3000"
+      - "traefik.http.middlewares.dashboard-stripprefix.stripprefix.prefixes=/dashboard"
+      - "traefik.http.routers.telemetry-dashboard.middlewares=dashboard-stripprefix"
 
       - "com.centurylinklabs.watchtower.enable=true"
       - "com.centurylinklabs.watchtower.monitor-only=false"
