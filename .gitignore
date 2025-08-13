@@ -29,6 +29,13 @@ go.work.sum
 .env.development
 **/.env*
 !.env.example
+
+# Secrets and tokens
+*.token
+*.secret
+api_keys/
+tokens/
+credentials/
 ingest/go/ibt_files/*.ibt
 *.DS_Store
 .DS_Store

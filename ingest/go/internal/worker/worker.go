@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"path/filepath"
 	"time"
 
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/processing"
@@ -35,15 +36,27 @@ func (wp *WorkerPool) startWorker(workerID int) {
 func (wp *WorkerPool) processWorkItem(ctx context.Context, workerID int, item WorkItem) {
 	startTime := time.Now()
 
+	if item.FileInfo == nil {
+		log.Printf("Worker %d: FileInfo is nil for path: %s", workerID, item.FilePath)
+		wp.errorsChan <- WorkError{
+			FilePath:  item.FilePath,
+			Error:     fmt.Errorf("FileInfo is nil"),
+			Retry:     false,
+			WorkerID:  workerID,
+			Timestamp: time.Now(),
+		}
+		return
+	}
+
 	filename := item.FileInfo.Name()
 	wp.UpdateWorkerStatus(workerID, filename, "PROCESSING")
 
 	log.Printf("Worker %d processing file: %s (retry %d)", workerID, item.FilePath, item.RetryCount)
 
-	// Create file processor (now includes optimized batching by default)
 	processor, err := processing.NewFileProcessor(wp.config, workerID, wp.rabbitPool)
 
 	if err != nil {
+		log.Printf("Worker %d ERROR creating file processor for %s: %v", workerID, filename, err)
 		wp.UpdateWorkerStatus(workerID, filename, "ERROR")
 		wp.errorsChan <- WorkError{
 			FilePath:  item.FilePath,
@@ -56,19 +69,16 @@ func (wp *WorkerPool) processWorkItem(ctx context.Context, workerID int, item Wo
 	}
 	defer processor.Close()
 
-	// Create timeout context for file processing
 	processCtx, processCancel := context.WithTimeout(ctx, wp.config.FileProcessTimeout)
 	defer processCancel()
 
-	// Channel to receive the result or timeout
 	resultChan := make(chan struct {
 		result *processing.ProcessResult
 		err    error
 	}, 1)
 
-	// Process file in goroutine to enable timeout
 	go func() {
-		result, err := processor.ProcessFile(processCtx, item.FilePath, item.FileInfo)
+		result, err := processor.ProcessFile(processCtx, filepath.Dir(item.FilePath), item.FileInfo)
 		resultChan <- struct {
 			result *processing.ProcessResult
 			err    error
@@ -88,6 +98,7 @@ func (wp *WorkerPool) processWorkItem(ctx context.Context, workerID int, item Wo
 	}
 
 	if processErr != nil {
+		log.Printf("Worker %d ERROR processing file %s: %v", workerID, filename, processErr)
 		wp.UpdateWorkerStatus(workerID, filename, "ERROR")
 		wp.errorsChan <- WorkError{
 			FilePath:  item.FilePath,

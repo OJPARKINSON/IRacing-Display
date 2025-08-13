@@ -3,12 +3,26 @@ package worker
 import (
 	"context"
 	"log"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/config"
 	"github.com/OJPARKINSON/IRacing-Display/ingest/go/internal/messaging"
 )
+
+// Helper to convert os.FileInfo to os.DirEntry for retry logic
+type dirEntryFromFileInfo struct {
+	os.FileInfo
+}
+
+func (d *dirEntryFromFileInfo) Type() os.FileMode {
+	return d.FileInfo.Mode().Type()
+}
+
+func (d *dirEntryFromFileInfo) Info() (os.FileInfo, error) {
+	return d.FileInfo, nil
+}
 
 type WorkerPool struct {
 	config      *config.Config
@@ -268,6 +282,7 @@ func (wp *WorkerPool) handleResult(result WorkResult) {
 }
 
 func (wp *WorkerPool) handleError(workError WorkError) {
+	log.Printf("WORKER POOL ERROR: Worker %d failed on file %s: %v", workError.WorkerID, workError.FilePath, workError.Error)
 	wp.mu.Lock()
 	wp.metrics.TotalErrors++
 	wp.metrics.QueueDepth--
@@ -277,8 +292,19 @@ func (wp *WorkerPool) handleError(workError WorkError) {
 		workError.WorkerID, workError.FilePath, workError.Error)
 
 	if workError.Retry && workError.WorkerID < wp.config.MaxRetries {
+		// Try to get FileInfo for retry
+		fileInfo, err := os.Stat(workError.FilePath)
+		if err != nil {
+			log.Printf("Cannot retry %s: file stat error: %v", workError.FilePath, err)
+			return
+		}
+
+		// Convert to DirEntry for compatibility
+		dirEntry := &dirEntryFromFileInfo{fileInfo}
+
 		retryItem := WorkItem{
 			FilePath:   workError.FilePath,
+			FileInfo:   dirEntry,
 			RetryCount: workError.WorkerID + 1,
 		}
 

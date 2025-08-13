@@ -84,6 +84,7 @@ func main() {
 	progress = worker.NewProgressDisplay(cfg.WorkerCount, expectedFiles)
 	pool.SetProgressDisplay(progress)
 
+	// Temporarily disable log discarding to see error messages
 	log.SetOutput(io.Discard)
 
 	progress.Start()
@@ -136,7 +137,7 @@ func discoverAndQueueFiles(ctx context.Context, pool *worker.WorkerPool, telemet
 		}
 
 		workItem := worker.WorkItem{
-			FilePath:   telemetryFolder,
+			FilePath:   filepath.Join(telemetryFolder, fileName),
 			FileInfo:   file,
 			RetryCount: 0,
 		}
