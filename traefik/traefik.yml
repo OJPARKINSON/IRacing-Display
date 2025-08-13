@@ -34,8 +34,8 @@ providers:
     directory: /etc/traefik
     watch: true
 
-# Certificates
-certificatesResolvers: {}
+# Certificates (none configured - using static certificates)
+# certificatesResolvers:
 
 # Logging
 log:

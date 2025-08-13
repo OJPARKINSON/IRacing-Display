@@ -5,11 +5,21 @@
 # Set RabbitMQ node name for remote operations
 export RABBITMQ_NODENAME=rabbit@rabbitmq
 
-# Wait for RabbitMQ to be ready
+# Wait for RabbitMQ to be ready with better error handling
 echo "Waiting for RabbitMQ to be ready..."
-until rabbitmqctl -n $RABBITMQ_NODENAME ping; do
-    echo "Still waiting for RabbitMQ..."
-    sleep 3
+RETRY_COUNT=0
+MAX_RETRIES=30
+
+until rabbitmqctl -n $RABBITMQ_NODENAME ping 2>/dev/null; do
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    if [ $RETRY_COUNT -gt $MAX_RETRIES ]; then
+        echo "ERROR: RabbitMQ failed to start after $MAX_RETRIES attempts"
+        echo "Trying basic connectivity test..."
+        nc -z rabbitmq 5672 || echo "Cannot reach rabbitmq:5672"
+        exit 1
+    fi
+    echo "Still waiting for RabbitMQ... (attempt $RETRY_COUNT/$MAX_RETRIES)"
+    sleep 5
 done
 
 echo "RabbitMQ is ready. Setting up users..."

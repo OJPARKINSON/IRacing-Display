@@ -87,25 +87,25 @@ services:
       - "traefik.http.middlewares.rabbitmq-stripprefix.stripprefix.prefixes=/rabbitmq"
       - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
 
-  rabbitmq-init:
-    image: rabbitmq:4.0-management
-    container_name: rabbitmq-init
-    restart: "no"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    volumes:
-      - ./config/init-rabbitmq.sh:/init-rabbitmq.sh:ro
-    environment:
-      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
-      RABBITMQ_PASS: ${RABBITMQ_PASS:-changeme}
-    networks:
-      - telemetry-network
-    command: >
-      bash -c "
-        export RABBITMQ_URL=rabbitmq:5672 &&
-        /init-rabbitmq.sh &&
-        echo 'RabbitMQ initialization completed successfully'"
+  # rabbitmq-init:
+  #   image: rabbitmq:4.0-management
+  #   container_name: rabbitmq-init
+  #   restart: "no"
+  #   depends_on:
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./config/init-rabbitmq.sh:/init-rabbitmq.sh:ro
+  #   environment:
+  #     RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+  #     RABBITMQ_PASS: ${RABBITMQ_PASS:-changeme}
+  #   networks:
+  #     - telemetry-network
+  #   command: >
+  #     bash -c "
+  #       export RABBITMQ_URL=rabbitmq:5672 &&
+  #       /init-rabbitmq.sh &&
+  #       echo 'RabbitMQ initialization completed successfully'"
 
   telemetry-service:
     image: ghcr.io/ojparkinson/iracing-telemetryservice:latest
@@ -114,8 +114,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      rabbitmq-init:
-        condition: service_completed_successfully
       questdb:
         condition: service_healthy
     networks:
