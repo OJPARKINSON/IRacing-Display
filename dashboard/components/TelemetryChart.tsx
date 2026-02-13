@@ -12,24 +12,27 @@ import {
 import type { TelemetryDataPoint } from "../lib/types";
 import type { chartConfig } from "./TelemetryCharts";
 
+interface TelemetryChartProps {
+	config: chartConfig;
+	chartData: TelemetryDataPoint[];
+	ReferenceLineX: number;
+	onHover?: (index: number | null) => void;
+}
+
 export const TelemetryChart = ({
 	config,
 	chartData,
 	ReferenceLineX,
-}: {
-	config: chartConfig;
-	chartData: TelemetryDataPoint[];
-	ReferenceLineX: number;
-}) => {
+	onHover,
+}: TelemetryChartProps) => {
 	const CustomTooltip = useCallback(({ active, payload }: any) => {
 		if (active && payload && payload.length) {
-			const dataPoint = payload[0].payload as TelemetryDataPoint & {
-				lapDistance?: number;
-			};
+			const dataPoint = payload[0].payload as TelemetryDataPoint;
+
 			return (
 				<div className="rounded border border-zinc-600 bg-zinc-800 p-2 shadow-lg">
 					<p className="text-xs text-zinc-300">
-						Distance: {dataPoint.lapDistance?.toFixed(2)} km
+						Distance: {dataPoint.LapDistPct?.toFixed(1)} %
 					</p>
 					<p className="text-xs text-zinc-300">
 						Time: {dataPoint.sessionTime?.toFixed(2)}s
@@ -53,10 +56,15 @@ export const TelemetryChart = ({
 				<ResponsiveContainer width="100%" height="100%">
 					<LineChart
 						data={chartData}
-						onMouseMove={() => {}}
 						onClick={() => {}}
 						margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
 						syncId="telemetry-charts"
+						onMouseMove={(e) => {
+							console.log("rger", e);
+							if (onHover) {
+								onHover(e.activeIndex as number);
+							}
+						}}
 					>
 						<CartesianGrid
 							strokeDasharray="3 3"
